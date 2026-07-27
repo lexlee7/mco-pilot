@@ -1,0 +1,47 @@
+# Déclaration de l'infrastructure pour Render.
+# En important ce dépôt via "Blueprint", Render crée automatiquement
+# le service web et la base de données décrits ci-dessous.
+
+services:
+  - type: web
+    name: pilotage-mco
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/sante
+    envVars:
+      # Connexion automatique à la base PostgreSQL déclarée plus bas.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mco-base
+          property: connectionString
+      # Jeu de données de démonstration au premier démarrage.
+      - key: SEED_ON_STARTUP
+        value: "true"
+      # Relances automatiques par e-mail.
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: SCHEDULER_TIMEZONE
+        value: Europe/Paris
+      # Front et API partagent la même URL : aucune origine externe à autoriser.
+      - key: CORS_ORIGINS
+        value: ""
+      # Messagerie : laisser vide pour rester en mode simulation.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+
+databases:
+  - name: mco-base
+    plan: free
+    databaseName: mco
+    user: mco
