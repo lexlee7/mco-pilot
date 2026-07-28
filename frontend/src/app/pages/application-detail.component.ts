@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, inject, signal } from '@angular/core';
+import { Component, Input, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
@@ -7,10 +7,13 @@ import { ApiService } from '../core/api.service';
 import { NotificationService } from '../core/ui.service';
 import {
   ApplicationDetail,
+  Cartographie,
   Dispositif,
+  Dojo,
   DocumentApp,
   Flux,
   JOURS,
+  Obsolescence,
   Partenaire,
   Plage,
   Referentiels,
@@ -19,7 +22,16 @@ import {
 } from '../core/models';
 import { IconeComponent } from '../shared/icone.component';
 
-type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'vulnerabilites';
+type Onglet =
+  | 'identite' | 'plages' | 'flux' | 'documentation'
+  | 'securite' | 'vulnerabilites' | 'obsolescences' | 'dojos';
+
+/** Nœud positionné sur la cartographie des échanges. */
+interface NoeudPlace {
+  flux: { id: number; nom: string; partenaire: string; protocole?: string | null;
+          frequence: string; heure?: string | null; bloquant: boolean; sens: string };
+  y: number;
+}
 
 @Component({
   selector: 'mco-application-detail',
@@ -39,9 +51,16 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
             <span [class]="classe(a.criticite)">{{ format(a.criticite) }}</span>
             <span [class]="classe(a.statut)">{{ format(a.statut) }}</span>
             @if (a.equipe) { <span class="pastille p-neutre">{{ a.equipe }}</span> }
+            @if (a.dora) { <span class="pastille p-info">Périmètre DORA</span> }
+            @if (a.expose_internet) { <span class="pastille p-alerte">Exposée Internet</span> }
             @if (a.nb_vulnerabilites_ouvertes) {
               <span class="pastille p-critique">
                 {{ a.nb_vulnerabilites_ouvertes }} faille(s) active(s)
+              </span>
+            }
+            @if (nbObsoEnRetard(a)) {
+              <span class="pastille p-critique">
+                {{ nbObsoEnRetard(a) }} obsolescence(s) hors délai
               </span>
             }
           </div>
@@ -98,6 +117,18 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
                     {{ a.environnement_url }}
                   </a>
                 } @else { <span class="doux">Non renseignée</span> }
+              </dd>
+              <dt>Périmètre réglementaire DORA</dt>
+              <dd>
+                <span [class]="a.dora ? 'pastille p-info' : 'pastille p-neutre'">
+                  {{ a.dora ? 'Oui' : 'Non' }}
+                </span>
+              </dd>
+              <dt>Exposition Internet</dt>
+              <dd>
+                <span [class]="a.expose_internet ? 'pastille p-alerte' : 'pastille p-neutre'">
+                  {{ a.expose_internet ? 'Oui — surface exposée' : 'Non — interne uniquement' }}
+                </span>
               </dd>
               <dt>Dernière mise à jour</dt>
               <dd class="mono doux">{{ a.maj_le | date: 'dd/MM/yyyy HH:mm' }}</dd>
@@ -203,9 +234,104 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
 
       <!-- ------------------------------------------------------ Flux -->
       @if (onglet() === 'flux') {
+        <div class="carte apparait" style="margin-bottom: 18px">
+          <div class="entre">
+            <div>
+              <div class="eyebrow">Cartographie</div>
+              <h2 class="titre-bloc">Schéma des échanges</h2>
+              <p class="doux" style="font-size: 13px; margin-top: 4px">
+                Entrées à gauche, sorties à droite. Un trait épais et rouge signale un flux
+                bloquant : son interruption a un impact métier immédiat.
+              </p>
+            </div>
+            <div class="rangee">
+              @if (cartographie(); as c) {
+                <span class="pastille p-info">{{ c.entrants.length }} entrant(s)</span>
+                <span class="pastille p-info">{{ c.sortants.length }} sortant(s)</span>
+                @if (c.nb_bloquants) {
+                  <span class="pastille p-critique">{{ c.nb_bloquants }} bloquant(s)</span>
+                }
+              }
+            </div>
+          </div>
+
+          @if (schema(); as s) {
+            <div class="schema">
+              <svg [attr.viewBox]="'0 0 900 ' + s.hauteur" [attr.height]="s.hauteur" width="100%">
+                <defs>
+                  <marker id="fleche" markerWidth="9" markerHeight="9" refX="8" refY="4.5"
+                          orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,1 L8,4.5 L0,8 z" fill="var(--texte-doux)" />
+                  </marker>
+                  <marker id="fleche-bloquante" markerWidth="9" markerHeight="9" refX="8" refY="4.5"
+                          orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,1 L8,4.5 L0,8 z" fill="var(--grenat)" />
+                  </marker>
+                </defs>
+
+                <!-- liaisons entrantes -->
+                @for (n of s.gauche; track n.flux.id) {
+                  <path
+                    [attr.d]="'M 200 ' + (n.y + 22) + ' C 275 ' + (n.y + 22) + ', 285 ' + s.centreY + ', 355 ' + s.centreY"
+                    fill="none"
+                    [attr.stroke]="n.flux.bloquant ? 'var(--grenat)' : 'var(--acier)'"
+                    [attr.stroke-width]="n.flux.bloquant ? 2.4 : 1.4"
+                    [attr.marker-end]="n.flux.bloquant ? 'url(#fleche-bloquante)' : 'url(#fleche)'"
+                  />
+                }
+                <!-- liaisons sortantes -->
+                @for (n of s.droite; track n.flux.id) {
+                  <path
+                    [attr.d]="'M 545 ' + s.centreY + ' C 620 ' + s.centreY + ', 630 ' + (n.y + 22) + ', 695 ' + (n.y + 22)"
+                    fill="none"
+                    [attr.stroke]="n.flux.bloquant ? 'var(--grenat)' : 'var(--acier)'"
+                    [attr.stroke-width]="n.flux.bloquant ? 2.4 : 1.4"
+                    [attr.marker-end]="n.flux.bloquant ? 'url(#fleche-bloquante)' : 'url(#fleche)'"
+                  />
+                }
+
+                <!-- nœuds entrants -->
+                @for (n of s.gauche; track n.flux.id) {
+                  <g [attr.transform]="'translate(10,' + n.y + ')'">
+                    <rect width="190" height="44" rx="9" class="noeud"
+                          [class.noeud--bloquant]="n.flux.bloquant" />
+                    <text x="12" y="18" class="noeud__titre">{{ n.flux.partenaire }}</text>
+                    <text x="12" y="33" class="noeud__detail">
+                      {{ n.flux.nom }}
+                    </text>
+                  </g>
+                }
+
+                <!-- application au centre -->
+                <g [attr.transform]="'translate(355,' + (s.centreY - 34) + ')'">
+                  <rect width="190" height="68" rx="12" class="noeud noeud--centre" />
+                  <text x="95" y="27" text-anchor="middle" class="noeud__code">{{ codeCourt() }}</text>
+                  <text x="95" y="46" text-anchor="middle" class="noeud__detail">
+                    {{ nomCourt() }}
+                  </text>
+                </g>
+
+                <!-- nœuds sortants -->
+                @for (n of s.droite; track n.flux.id) {
+                  <g [attr.transform]="'translate(700,' + n.y + ')'">
+                    <rect width="190" height="44" rx="9" class="noeud"
+                          [class.noeud--bloquant]="n.flux.bloquant" />
+                    <text x="12" y="18" class="noeud__titre">{{ n.flux.partenaire }}</text>
+                    <text x="12" y="33" class="noeud__detail">{{ n.flux.nom }}</text>
+                  </g>
+                }
+              </svg>
+            </div>
+          } @else {
+            <div class="vide" style="margin-top: 16px">
+              Aucun flux référencé : la cartographie s'affichera dès le premier échange déclaré.
+            </div>
+          }
+        </div>
+
         <div class="carte apparait">
           <div class="eyebrow">Échanges</div>
-          <h2 class="titre-bloc">Flux entrants et sortants</h2>
+          <h2 class="titre-bloc">Détail des flux</h2>
           <div class="tableau-conteneur" style="margin-top: 14px">
             <table class="tableau">
               <thead>
@@ -323,6 +449,16 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
                   <span [class]="classe(d.etat)">{{ format(d.etat) }}</span>
                   @if (d.version) { <span class="mono">{{ d.version }}</span> }
                 </div>
+                @if (d.url) {
+                  <a class="lien-doc" [href]="d.url" target="_blank" rel="noopener">
+                    <mco-icone nom="lien" [taille]="13" /> Ouvrir le document
+                  </a>
+                } @else {
+                  <button class="btn btn--fantome btn--petit" type="button" style="margin-top: 8px"
+                          (click)="renseignerLien(d)">
+                    <mco-icone nom="lien" [taille]="13" /> Ajouter un lien
+                  </button>
+                }
               </div>
             } @empty {
               <div class="vide">Aucune typologie documentaire suivie pour cette application.</div>
@@ -349,6 +485,11 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
             <div class="champ">
               <label for="dv">Version</label>
               <input id="dv" class="saisie mono" [(ngModel)]="nouveauDocument.version" />
+            </div>
+            <div class="champ" style="flex: 1; min-width: 220px">
+              <label for="du">Lien vers le document <span class="doux">(facultatif)</span></label>
+              <input id="du" class="saisie" [(ngModel)]="nouveauDocument.url"
+                     placeholder="https://sharepoint.exemple.fr/…" />
             </div>
             <button class="btn btn--primaire" type="button" (click)="ajouterDocument()">
               <mco-icone nom="plus" /> Ajouter au suivi
@@ -448,6 +589,129 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
           </div>
         </div>
       }
+
+      <!-- ------------------------------------------------------ Obsolescences -->
+      @if (onglet() === 'obsolescences') {
+        <div class="carte apparait">
+          <div class="entre">
+            <div>
+              <div class="eyebrow">Fin de support</div>
+              <h2 class="titre-bloc">Composants obsolètes</h2>
+            </div>
+            <a class="btn" routerLink="/obsolescences">Voir le planning du parc</a>
+          </div>
+          <div class="tableau-conteneur" style="margin-top: 14px">
+            <table class="tableau">
+              <thead>
+                <tr>
+                  <th>Composant</th><th>Version</th><th>Cible</th><th>Fin de support</th>
+                  <th>Traitement prévu</th><th>Statut</th><th>Porteur</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (o of a.obsolescences; track o.id) {
+                  <tr>
+                    <td>{{ o.composant }}</td>
+                    <td class="mono">{{ o.version_obsolete }}</td>
+                    <td class="mono">{{ o.version_cible || '—' }}</td>
+                    <td class="mono">
+                      {{ o.date_limite ? (o.date_limite | date: 'dd/MM/yyyy') : '—' }}
+                      @if (o.en_retard) {
+                        <div class="pastille p-critique" style="font-size: 10px; margin-top: 4px">
+                          Dépassée
+                        </div>
+                      }
+                    </td>
+                    <td class="mono">
+                      {{ o.date_traitement_prevue ? (o.date_traitement_prevue | date: 'dd/MM/yyyy') : '—' }}
+                      @if (o.derive_planning) {
+                        <div class="pastille p-alerte" style="font-size: 10px; margin-top: 4px">
+                          Dérive
+                        </div>
+                      }
+                    </td>
+                    <td><span [class]="classe(o.statut)">{{ format(o.statut) }}</span></td>
+                    <td class="doux">{{ o.porteur || '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7">
+                    <div class="vide" style="border: none">
+                      Aucune obsolescence déclarée. Utilisez la page Obsolescences pour en ajouter.
+                    </div>
+                  </td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+
+      <!-- ------------------------------------------------------ DoJo -->
+      @if (onglet() === 'dojos') {
+        <div class="carte apparait">
+          <div class="eyebrow">Procédures filmées</div>
+          <h2 class="titre-bloc">DoJo de l'application</h2>
+          <p class="doux" style="font-size: 13px; margin-top: 4px">
+            Gestes d'exploitation expliqués en vidéo. Les vidéos restent hébergées sur votre
+            plateforme : seuls les liens sont référencés ici.
+          </p>
+
+          <div class="grille-dojos">
+            @for (d of a.dojos; track d.id) {
+              <article class="dojo">
+                <div class="entre">
+                  <span class="pastille p-info">{{ format(d.type) }}</span>
+                  <button class="btn btn--fantome btn--petit" type="button" (click)="retirerDojo(d)">
+                    <mco-icone nom="poubelle" [taille]="14" />
+                  </button>
+                </div>
+                <h3 class="dojo__titre">{{ d.titre }}</h3>
+                @if (d.description) {
+                  <p class="doux" style="font-size: 12.5px; margin: 6px 0 0">{{ d.description }}</p>
+                }
+                <div class="rangee doux" style="margin-top: 10px; font-size: 11.5px">
+                  @if (d.duree) { <span class="mono">{{ d.duree }}</span> }
+                  @if (d.auteur) { <span>{{ d.auteur }}</span> }
+                  @if (d.date_maj) { <span class="mono">{{ d.date_maj | date: 'dd/MM/yy' }}</span> }
+                </div>
+                <a class="btn btn--petit" [href]="d.url" target="_blank" rel="noopener"
+                   style="margin-top: 12px">
+                  <mco-icone nom="video" [taille]="15" /> Voir la vidéo
+                </a>
+              </article>
+            } @empty {
+              <div class="vide">Aucun DoJo référencé pour cette application.</div>
+            }
+          </div>
+
+          <div class="ajout">
+            <div class="champ" style="flex: 1; min-width: 200px">
+              <label for="jt">Intitulé du DoJo</label>
+              <input id="jt" class="saisie" [(ngModel)]="nouveauDojo.titre"
+                     placeholder="Comment relancer l'application" />
+            </div>
+            <div class="champ">
+              <label for="jy">Type</label>
+              <select id="jy" class="saisie" [(ngModel)]="nouveauDojo.type">
+                @for (ty of referentiels()?.types_dojo ?? []; track ty) {
+                  <option [value]="ty">{{ format(ty) }}</option>
+                }
+              </select>
+            </div>
+            <div class="champ" style="flex: 1; min-width: 220px">
+              <label for="ju">Lien de la vidéo</label>
+              <input id="ju" class="saisie" [(ngModel)]="nouveauDojo.url" placeholder="https://…" />
+            </div>
+            <div class="champ" style="max-width: 110px">
+              <label for="jd">Durée</label>
+              <input id="jd" class="saisie" [(ngModel)]="nouveauDojo.duree" placeholder="8 min" />
+            </div>
+            <button class="btn btn--primaire" type="button" (click)="ajouterDojo()">
+              <mco-icone nom="plus" /> Ajouter
+            </button>
+          </div>
+        </div>
+      }
     } @else {
       <div class="vide">Chargement de la fiche…</div>
     }
@@ -504,6 +768,37 @@ type Onglet = 'identite' | 'plages' | 'flux' | 'documentation' | 'securite' | 'v
       .jauge-doc { text-align: right; }
       .jauge-doc .mono { font-family: var(--display); font-size: 28px; font-weight: 600; display: block; }
       .jauge-doc .doux { font-size: 11px; }
+
+      .schema { margin-top: 18px; overflow-x: auto; }
+      .schema svg { min-width: 700px; }
+      .noeud {
+        fill: var(--surface-forte);
+        stroke: var(--bordure-forte);
+        stroke-width: 1;
+      }
+      .noeud--bloquant { stroke: var(--grenat); stroke-width: 1.6; }
+      .noeud--centre { fill: var(--signal-sourd); stroke: var(--signal); stroke-width: 1.6; }
+      .noeud__titre { fill: var(--texte); font-size: 12px; font-weight: 500; font-family: var(--corps); }
+      .noeud__code { fill: var(--texte); font-size: 15px; font-weight: 600; font-family: var(--display); }
+      .noeud__detail { fill: var(--texte-doux); font-size: 10.5px; font-family: var(--corps); }
+
+      .lien-doc {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 10px; font-size: 12px; color: var(--signal);
+      }
+      .lien-doc:hover { text-decoration: underline; }
+
+      .grille-dojos {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 14px; margin-top: 18px;
+      }
+      .dojo {
+        padding: 15px; border: 1px solid var(--bordure);
+        border-radius: var(--r-m); background: var(--surface);
+        transition: border-color var(--transition), transform var(--transition);
+      }
+      .dojo:hover { border-color: var(--bordure-forte); transform: translateY(-2px); }
+      .dojo__titre { font-size: 15px; margin-top: 10px; }
     `,
   ],
 })
@@ -530,12 +825,47 @@ export class ApplicationDetailComponent {
     { cle: 'documentation', libelle: 'Documentation', compteur: true },
     { cle: 'securite', libelle: 'Dispositifs de sécurité', compteur: true },
     { cle: 'vulnerabilites', libelle: 'Vulnérabilités', compteur: true },
+    { cle: 'obsolescences', libelle: 'Obsolescences', compteur: true },
+    { cle: 'dojos', libelle: 'DoJo', compteur: true },
   ];
 
   nouvellePlage: Partial<Plage> = { jour_semaine: 2, heure_debut: '22:00', heure_fin: '00:00', libelle: '' };
   nouveauFlux: Partial<Flux> = { nom: '', sens: 'ENTRANT', frequence: 'QUOTIDIEN', partenaire_id: null };
   nouveauDocument: Partial<DocumentApp> = { typologie: 'DAT', etat: 'MANQUANT', version: '' };
   nouveauDispositif: Partial<Dispositif> = { outil: '', type_scan: '', frequence: '' };
+  nouveauDojo: Partial<Dojo> = { titre: '', type: 'EXPLOITATION', url: '', duree: '' };
+
+  readonly cartographie = signal<Cartographie | undefined>(undefined);
+
+  /** Disposition de la cartographie : entrées à gauche, sorties à droite. */
+  readonly schema = computed(() => {
+    const c = this.cartographie();
+    if (!c) return null;
+    const gauche = [...c.entrants, ...c.bidirectionnels];
+    const droite = [...c.sortants, ...c.bidirectionnels];
+    if (!gauche.length && !droite.length) return null;
+
+    const pas = 62;
+    const nb = Math.max(gauche.length, droite.length, 1);
+    const hauteur = nb * pas + 56;
+    const placer = (liste: typeof gauche): NoeudPlace[] =>
+      liste.map((flux, index) => ({
+        flux,
+        y: 28 + index * pas + ((nb - liste.length) * pas) / 2,
+      }));
+    return {
+      hauteur,
+      centreY: hauteur / 2,
+      gauche: placer(gauche),
+      droite: placer(droite),
+    };
+  });
+
+  readonly codeCourt = computed(() => this.app()?.code ?? '');
+  readonly nomCourt = computed(() => {
+    const nom = this.app()?.nom ?? '';
+    return nom.length > 26 ? nom.slice(0, 25) + '…' : nom;
+  });
 
   constructor() {
     this.api.referentiels().subscribe((r) => this.referentiels.set(r));
@@ -544,6 +874,11 @@ export class ApplicationDetailComponent {
 
   charger(): void {
     this.api.application(this.appId).subscribe((a) => this.app.set(a));
+    this.api.cartographie(this.appId).subscribe((c) => this.cartographie.set(c));
+  }
+
+  nbObsoEnRetard(a: ApplicationDetail): number {
+    return a.obsolescences.filter((o) => o.en_retard).length;
   }
 
   compteur(a: ApplicationDetail, cle: Onglet): number {
@@ -553,6 +888,8 @@ export class ApplicationDetailComponent {
       case 'documentation': return a.documents.length;
       case 'securite': return a.dispositifs.length;
       case 'vulnerabilites': return a.vulnerabilites.length;
+      case 'obsolescences': return a.obsolescences.length;
+      case 'dojos': return a.dojos.length;
       default: return 0;
     }
   }
@@ -615,6 +952,42 @@ export class ApplicationDetailComponent {
   }
   retirerDispositif(d: Dispositif): void {
     this.api.supprimerDispositif(this.appId, d.id).subscribe(() => { this.notif.succes('Dispositif retiré.'); this.charger(); });
+  }
+
+  // ------------------------------------------------------------ DoJo
+  ajouterDojo(): void {
+    if (!this.nouveauDojo.titre || !this.nouveauDojo.url) {
+      this.notif.erreur('Un intitulé et un lien vidéo sont nécessaires.');
+      return;
+    }
+    this.api.ajouterDojo(this.appId, this.nouveauDojo).subscribe({
+      next: () => {
+        this.notif.succes('DoJo référencé.');
+        this.nouveauDojo = { titre: '', type: 'EXPLOITATION', url: '', duree: '' };
+        this.charger();
+      },
+      error: () => this.notif.erreur('Ajout impossible.'),
+    });
+  }
+
+  retirerDojo(d: Dojo): void {
+    if (!confirm(`Retirer le DoJo « ${d.titre} » ?`)) return;
+    this.api.supprimerDojo(this.appId, d.id).subscribe(() => {
+      this.notif.succes('DoJo retiré.');
+      this.charger();
+    });
+  }
+
+  /** Le lien documentaire est facultatif : on le renseigne à la demande. */
+  renseignerLien(d: DocumentApp): void {
+    const url = prompt(`Lien du document ${this.format(d.typologie)} :`, d.url ?? '');
+    if (url === null) return;
+    this.api
+      .modifierDocument(this.appId, d.id, { ...d, url: url.trim() || null })
+      .subscribe(() => {
+        this.notif.succes('Lien enregistré.');
+        this.charger();
+      });
   }
 
   classe = classePastille;

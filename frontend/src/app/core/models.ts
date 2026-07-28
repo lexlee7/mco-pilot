@@ -4,6 +4,8 @@ export type ModeSuivi = 'AUTOMATIQUE' | 'MANUEL' | 'NON';
 export type Gravite = 'CRITIQUE' | 'ELEVEE' | 'MOYENNE' | 'FAIBLE';
 export type StatutVulnerabilite =
   | 'OUVERTE' | 'EN_COURS' | 'CORRIGEE' | 'RISQUE_ACCEPTE' | 'FAUX_POSITIF';
+export type StatutObsolescence =
+  | 'A_QUALIFIER' | 'A_PLANIFIER' | 'PLANIFIEE' | 'EN_COURS' | 'TRAITEE' | 'DEROGATION';
 export type EtatDocument = 'A_JOUR' | 'OBSOLETE' | 'EN_COURS' | 'MANQUANT' | 'NON_APPLICABLE';
 
 export interface Partenaire {
@@ -80,6 +82,87 @@ export interface VulnerabiliteLiee {
   age_jours: number;
 }
 
+export interface Obsolescence {
+  id: number;
+  application_id: number;
+  code_application?: string | null;
+  nom_application?: string | null;
+  composant: string;
+  version_obsolete: string;
+  version_cible?: string | null;
+  date_limite?: string | null;
+  date_traitement_prevue?: string | null;
+  date_traitement_reelle?: string | null;
+  statut: StatutObsolescence;
+  criticite: Criticite;
+  charge_estimee?: string | null;
+  porteur?: string | null;
+  commentaire?: string | null;
+  jours_restants?: number | null;
+  en_retard: boolean;
+  derive_planning: boolean;
+}
+
+export interface LigneComposant {
+  composant: string;
+  nb_applications: number;
+  nb_en_retard: number;
+  echeance_la_plus_proche?: string | null;
+  obsolescences: Obsolescence[];
+}
+
+export interface LigneApplicationObso {
+  application_id: number;
+  code: string;
+  nom: string;
+  criticite: Criticite;
+  nb_en_retard: number;
+  obsolescences: Obsolescence[];
+}
+
+export interface PlanningObsolescences {
+  debut: string;
+  fin: string;
+  nb_obsolescences: number;
+  nb_en_retard: number;
+  nb_sans_echeance: number;
+  par_composant: LigneComposant[];
+  par_application: LigneApplicationObso[];
+}
+
+export interface Dojo {
+  id: number;
+  application_id: number;
+  titre: string;
+  type: string;
+  url: string;
+  duree?: string | null;
+  auteur?: string | null;
+  date_maj?: string | null;
+  description?: string | null;
+}
+
+export interface NoeudFlux {
+  id: number;
+  nom: string;
+  sens: string;
+  frequence: string;
+  heure?: string | null;
+  jour?: string | null;
+  protocole?: string | null;
+  bloquant: boolean;
+  partenaire: string;
+  partenaire_id?: number | null;
+}
+
+export interface Cartographie {
+  application: { id: number; code: string; nom: string; criticite: string; statut: string };
+  entrants: NoeudFlux[];
+  sortants: NoeudFlux[];
+  bidirectionnels: NoeudFlux[];
+  nb_bloquants: number;
+}
+
 export interface Application {
   id: number;
   code: string;
@@ -99,6 +182,8 @@ export interface Application {
   sanity_check_commentaire?: string | null;
   habilitations?: string | null;
   editeur_id?: number | null;
+  dora: boolean;
+  expose_internet: boolean;
   editeur?: Partenaire | null;
   plages: Plage[];
   nb_vulnerabilites_ouvertes: number;
@@ -111,6 +196,8 @@ export interface ApplicationDetail extends Application {
   documents: DocumentApp[];
   dispositifs: Dispositif[];
   vulnerabilites: VulnerabiliteLiee[];
+  obsolescences: Obsolescence[];
+  dojos: Dojo[];
 }
 
 export interface ApplicationImpactee {
@@ -232,6 +319,9 @@ export interface DashboardStats {
   taux_documentation: number;
   taux_sbom_automatise: number;
   nb_evenements_semaine: number;
+  nb_obsolescences_actives: number;
+  nb_obsolescences_en_retard: number;
+  nb_obsolescences_90_jours: number;
   repartition_statuts: RepartitionItem[];
   repartition_criticites: RepartitionItem[];
   repartition_gravites: RepartitionItem[];
@@ -252,6 +342,8 @@ export interface Referentiels {
   statuts_vulnerabilite: string[];
   types_evenement: string[];
   categories_template: string[];
+  statuts_obsolescence: string[];
+  types_dojo: string[];
 }
 
 export const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];

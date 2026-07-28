@@ -19,6 +19,10 @@ const TRACES: Record<string, string> = {
   eclair: 'M13 3L5 14h6l-1 7 8-11h-6z',
   coche: 'M4 12.5l5 5 11-11',
   croix: 'M6 6l12 12M18 6L6 18',
+  sablier: 'M7 3h10M7 21h10M8 3v3.5c0 2 4 3.3 4 5.5s-4 3.5-4 5.5V21M16 3v3.5c0 2-4 3.3-4 5.5s4 3.5 4 5.5V21',
+  carte: 'M4 7h5v5H4zM15 4h5v5h-5zM15 15h5v5h-5zM9 9.5h6M9 16h6M12 12v4',
+  video: 'M3 6h13v12H3zM16 10l5-3v10l-5-3',
+  lien: 'M10 13a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 1 0-5.7-5.7L11.5 6M14 11a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 1 0 5.7 5.7L12.5 18',
 };
 
 @Component({

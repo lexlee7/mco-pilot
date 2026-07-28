@@ -31,6 +31,12 @@ export const routes: Routes = [
       import('./pages/vulnerabilites.component').then((m) => m.VulnerabilitesComponent),
   },
   {
+    path: 'obsolescences',
+    title: 'Obsolescences — MCO',
+    loadComponent: () =>
+      import('./pages/obsolescences.component').then((m) => m.ObsolescencesComponent),
+  },
+  {
     path: 'calendrier',
     title: 'Calendrier MCO',
     loadComponent: () => import('./pages/calendrier.component').then((m) => m.CalendrierComponent),

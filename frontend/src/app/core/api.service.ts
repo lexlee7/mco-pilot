@@ -5,6 +5,8 @@ import { Observable, shareReplay } from 'rxjs';
 import {
   Application,
   ApplicationDetail,
+  Cartographie,
+  Dojo,
   DashboardStats,
   Dispositif,
   DocumentApp,
@@ -13,8 +15,10 @@ import {
   HistoriqueComm,
   ListeDiffusion,
   OccurrencePlage,
+  Obsolescence,
   Partenaire,
   Plage,
+  PlanningObsolescences,
   Referentiels,
   ReponseCreneaux,
   TemplateComm,
@@ -104,6 +108,41 @@ export class ApiService {
   }
   supprimerDispositif(appId: number, id: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/api/applications/${appId}/dispositifs/${id}`);
+  }
+
+  ajouterDojo(appId: number, corps: Partial<Dojo>): Observable<Dojo> {
+    return this.http.post<Dojo>(`${this.base}/api/applications/${appId}/dojos`, corps);
+  }
+  supprimerDojo(appId: number, id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/applications/${appId}/dojos/${id}`);
+  }
+
+  cartographie(appId: number): Observable<Cartographie> {
+    return this.http.get<Cartographie>(`${this.base}/api/applications/${appId}/cartographie`);
+  }
+
+  // ------------------------------------------------------------ Obsolescences
+  listerObsolescences(filtres: Record<string, string | undefined> = {}): Observable<Obsolescence[]> {
+    let params = new HttpParams();
+    Object.entries(filtres).forEach(([cle, valeur]) => {
+      if (valeur) params = params.set(cle, valeur);
+    });
+    return this.http.get<Obsolescence[]>(`${this.base}/api/obsolescences`, { params });
+  }
+  planningObsolescences(): Observable<PlanningObsolescences> {
+    return this.http.get<PlanningObsolescences>(`${this.base}/api/obsolescences/planning`);
+  }
+  composantsObsoletes(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/api/obsolescences/composants`);
+  }
+  creerObsolescence(corps: Partial<Obsolescence>): Observable<Obsolescence> {
+    return this.http.post<Obsolescence>(`${this.base}/api/obsolescences`, corps);
+  }
+  modifierObsolescence(id: number, corps: Partial<Obsolescence>): Observable<Obsolescence> {
+    return this.http.put<Obsolescence>(`${this.base}/api/obsolescences/${id}`, corps);
+  }
+  supprimerObsolescence(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/obsolescences/${id}`);
   }
 
   // ------------------------------------------------------------ Partenaires

@@ -16,6 +16,8 @@ from ..models import (
     Evenement,
     Gravite,
     ModeSuivi,
+    Obsolescence,
+    StatutObsolescence,
     StatutVulnerabilite,
     Vulnerabilite,
     VulnerabiliteApplication,
@@ -60,6 +62,26 @@ def statistiques(db: Session = Depends(get_db)):
         .count()
     )
 
+    obso_actives = (
+        db.query(Obsolescence)
+        .filter(
+            Obsolescence.statut.in_(
+                [
+                    StatutObsolescence.A_QUALIFIER,
+                    StatutObsolescence.A_PLANIFIER,
+                    StatutObsolescence.PLANIFIEE,
+                    StatutObsolescence.EN_COURS,
+                ]
+            )
+        )
+        .all()
+    )
+    obso_retard = [o for o in obso_actives if o.date_limite and o.date_limite < aujourdhui]
+    horizon = aujourdhui + timedelta(days=90)
+    obso_90 = [
+        o for o in obso_actives if o.date_limite and aujourdhui <= o.date_limite <= horizon
+    ]
+
     compte_par_app: Counter[int] = Counter(lien.application_id for lien, _ in liens)
     a_risque = sorted(
         apps,
@@ -89,6 +111,9 @@ def statistiques(db: Session = Depends(get_db)):
         taux_documentation=taux_doc,
         taux_sbom_automatise=taux_sbom,
         nb_evenements_semaine=nb_evenements,
+        nb_obsolescences_actives=len(obso_actives),
+        nb_obsolescences_en_retard=len(obso_retard),
+        nb_obsolescences_90_jours=len(obso_90),
         repartition_statuts=[RepartitionItem(cle=k, valeur=v) for k, v in statuts.items()],
         repartition_criticites=[RepartitionItem(cle=k, valeur=v) for k, v in criticites.items()],
         repartition_gravites=[RepartitionItem(cle=k, valeur=v) for k, v in gravites.items()],

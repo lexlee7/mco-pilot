@@ -88,9 +88,15 @@ import { ModaleComponent } from '../shared/modale.component';
                 <td class="mono">{{ app.code }}</td>
                 <td>
                   <a class="lien-nom" [routerLink]="['/applications', app.id]">{{ app.nom }}</a>
-                  @if (app.equipe) {
-                    <div class="doux" style="font-size: 12px">{{ app.equipe }}</div>
-                  }
+                  <div class="rangee" style="gap: 5px; margin-top: 4px">
+                    @if (app.equipe) {
+                      <span class="doux" style="font-size: 12px">{{ app.equipe }}</span>
+                    }
+                    @if (app.dora) { <span class="marqueur marqueur--dora">DORA</span> }
+                    @if (app.expose_internet) {
+                      <span class="marqueur marqueur--web">Internet</span>
+                    }
+                  </div>
                 </td>
                 <td><span [class]="classe(app.criticite)">{{ format(app.criticite) }}</span></td>
                 <td><span [class]="classe(app.statut)">{{ format(app.statut) }}</span></td>
@@ -223,6 +229,23 @@ import { ModaleComponent } from '../shared/modale.component';
           </div>
         </div>
 
+        <div class="rangee" style="margin-top: 18px; gap: 24px">
+          <label class="interrupteur">
+            <input type="checkbox" [(ngModel)]="brouillon.dora" />
+            <span>
+              <strong>Application DORA</strong>
+              <span class="doux">Soumise au règlement sur la résilience opérationnelle</span>
+            </span>
+          </label>
+          <label class="interrupteur">
+            <input type="checkbox" [(ngModel)]="brouillon.expose_internet" />
+            <span>
+              <strong>Exposée à Internet</strong>
+              <span class="doux">Accessible depuis l'extérieur du réseau interne</span>
+            </span>
+          </label>
+        </div>
+
         <div class="grille-form" style="margin-top: 16px">
           <div class="champ">
             <label for="sbomc">Précision SBOM</label>
@@ -268,6 +291,16 @@ import { ModaleComponent } from '../shared/modale.component';
       .filtre { max-width: 210px; }
       .lien-nom { font-weight: 500; border-bottom: 1px solid transparent; transition: border-color var(--transition); }
       .lien-nom:hover { border-color: var(--signal); }
+      .marqueur {
+        font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.07em;
+        padding: 2px 6px; border-radius: 4px; text-transform: uppercase;
+      }
+      .marqueur--dora { color: var(--signal); background: var(--signal-sourd); }
+      .marqueur--web { color: var(--ambre); background: rgba(242, 163, 60, 0.13); }
+      .interrupteur { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+      .interrupteur input { accent-color: var(--signal); width: 16px; height: 16px; margin-top: 2px; }
+      .interrupteur strong { display: block; font-size: 13.5px; font-weight: 500; }
+      .interrupteur .doux { font-size: 11.5px; }
     `,
   ],
 })
@@ -384,6 +417,8 @@ export class ApplicationsComponent {
       sbom_mode: 'NON',
       sanity_check_mode: 'NON',
       editeur_id: null,
+      dora: false,
+      expose_internet: false,
     };
   }
 

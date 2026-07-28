@@ -48,7 +48,7 @@ interface Jour {
           <button class="btn btn--petit" type="button" (click)="decaler(-1)">
             <mco-icone nom="retour" [taille]="15" />
           </button>
-          <strong class="mois">{{ premierJour() | date: 'MMMM y' : '' : 'fr' }}</strong>
+          <strong class="mois">{{ premierJour() | date: 'MMMM y' }}</strong>
           <button class="btn btn--petit" type="button" (click)="decaler(1)">
             <mco-icone nom="retour" [taille]="15" style="transform: rotate(180deg)" />
           </button>

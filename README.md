@@ -11,9 +11,10 @@ vulnérabilités avec relances automatiques, calendrier MCO et communication de 
 | Module | Ce que vous y faites |
 |---|---|
 | **Tableau de bord** | Voir en un écran l'état du parc, la dette de sécurité et la capacité d'intervention (le « ruban hebdomadaire »). |
-| **Parc applicatif** | Créer/modifier les applications. Chaque fiche contient : responsable, notes, plages de maintenance, flux, habilitations de production, SBOM, sanity check, documentation, dispositifs de sécurité, vulnérabilités. |
+| **Parc applicatif** | Créer/modifier les applications. Chaque fiche contient : responsable, notes, périmètre DORA, exposition Internet, plages de maintenance, cartographie des flux, habilitations de production, SBOM, sanity check, documentation (avec liens), dispositifs de sécurité, vulnérabilités, obsolescences et DoJo. |
 | **Créneaux de maintenance** | Sélectionner plusieurs applications (ou tout le parc) et trouver la fenêtre commune. S'il n'existe aucun créneau parfait, l'outil propose le **moindre mal** en nommant les applications en conflit. |
 | **Vulnérabilités** | Déclarer une faille (composant, version touchée, version cible), l'associer à plusieurs applications, suivre l'avancement application par application, déclencher les relances. |
+| **Obsolescences** | Suivre les composants en fin de support : version obsolète, version cible, date limite imposée par l'éditeur et date de traitement planifiée. Planning visuel du parc, groupable par composant ou par application. |
 | **Calendrier MCO** | Voir les plages projetées et inscrire les événements transverses (maintenance SSO, coupure réseau, fenêtre de tir infra, gel de production). |
 | **Éditeurs & partenaires** | Annuaire centralisé des contacts et des chaînes d'escalade. |
 | **Communication de crise** | Assistant en 3 étapes : modèle → destinataires → envoi. Éditeur de modèles HTML, listes de diffusion, historique. |
@@ -100,7 +101,17 @@ Si certains mots ci-dessous ne vous sont pas familiers, voici l'essentiel :
 
 ---
 
-## 4. Installation en local — pas à pas
+## 4. Installation en local — pas à pas *(facultatif)*
+
+> **Vous ne voulez rien installer sur votre PC ?** Sautez directement à la
+> [section 5](#5-déploiement-gratuit-sur-render--pas-à-pas). Le déploiement se fait
+> entièrement depuis un navigateur : c'est le serveur de Render qui installe Python,
+> Node et compile l'application. Vous obtenez une adresse web utilisable depuis
+> n'importe quel poste, sans avoir rien posé sur le vôtre.
+>
+> Cette section 4 ne sert qu'à faire tourner l'application **sur votre machine**, ce qui
+> est utile pour développer ou tester hors ligne — mais n'est pas nécessaire pour
+> l'utiliser.
 
 ### Étape 4.1 — Installer les deux outils nécessaires
 
@@ -198,26 +209,74 @@ $env:SMTP_PASSWORD="votre_mot_de_passe"
 
 ## 5. Déploiement gratuit sur Render — pas à pas
 
-### Étape 5.1 — Mettre le code sur GitHub
+### Étape 5.1 — Mettre le code sur GitHub **sans rien installer**
 
-Créez un compte sur <https://github.com> si vous n'en avez pas, puis créez un dépôt
-vide (bouton **New**, nommez-le par exemple `mco-pilot`, laissez-le **Public**, et ne
-cochez aucune option d'initialisation).
+Render ne sait pas déployer un dossier posé sur votre disque : il va chercher le code
+sur GitHub. Il faut donc y déposer le projet une fois. **Cela se fait entièrement depuis
+votre navigateur, sans installer le moindre logiciel** — ni Git, ni Python, ni Node.
+C'est le serveur de Render qui se chargera de tout compiler.
 
-Depuis le dossier du projet :
+**a) Décompresser l'archive.** Windows et macOS savent le faire nativement :
 
-```bash
-git init
-git add .
-git commit -m "Application de pilotage MCO"
-git branch -M main
-git remote add origin https://github.com/VOTRE-COMPTE/mco-pilot.git
-git push -u origin main
-```
+- **Windows** : clic droit sur `mco-pilot.zip` → **Extraire tout…** → **Extraire**.
+- **macOS** : double-clic sur l'archive.
 
-Remplacez `VOTRE-COMPTE` par votre identifiant GitHub. Si Git vous demande un mot de
-passe, utilisez un **jeton d'accès personnel** (GitHub → Settings → Developer settings
-→ Personal access tokens).
+Vous obtenez un dossier `mco-pilot` contenant `backend`, `frontend`, `Dockerfile`,
+`README.md`, `render.yaml`. Ouvrez-le : vous allez avoir besoin de son contenu à
+l'étape c.
+
+> **Attention à un piège classique.** Selon l'outil de décompression, vous pouvez
+> obtenir un dossier `mco-pilot` qui contient… un second dossier `mco-pilot`. Descendez
+> jusqu'à celui qui contient directement `Dockerfile` : c'est **son contenu** qu'il faut
+> envoyer, pas le dossier parent. Si `Dockerfile` ne se trouve pas à la racine du dépôt
+> GitHub, Render ne saura pas construire l'application.
+
+**b) Créer le dépôt sur GitHub.** Créez un compte sur <https://github.com> si vous n'en
+avez pas. Cliquez ensuite sur le bouton **New** (ou rendez-vous sur
+<https://github.com/new>) :
+
+- **Repository name** : `mco-pilot`
+- Laissez **Public**
+- **Ne cochez aucune case d'initialisation** (pas de README, pas de .gitignore)
+- Cliquez **Create repository**
+
+GitHub affiche alors une page d'instructions. Repérez le lien
+**« uploading an existing file »** au milieu de la page et cliquez dessus. (Vous pouvez
+aussi aller directement à `https://github.com/VOTRE-COMPTE/mco-pilot/upload/main`.)
+
+**c) Déposer les fichiers.** Ouvrez côte à côte votre explorateur de fichiers et la
+fenêtre du navigateur, puis **sélectionnez tout le contenu** du dossier `mco-pilot`
+(`Ctrl+A` sous Windows, `Cmd+A` sous macOS) et **faites-le glisser dans la zone de dépôt
+de GitHub**. Les sous-dossiers `backend` et `frontend` sont envoyés avec leur arborescence.
+
+Patientez que la liste des fichiers se remplisse (une cinquantaine, quelques dizaines de
+secondes). Descendez en bas de page, écrivez un court message dans le champ de commit
+— par exemple `Application de pilotage MCO` — puis cliquez **Commit changes**.
+
+> **Un détail qui compte.** Le fichier `.gitignore` commence par un point : sur macOS
+> comme sur Windows, ces fichiers sont masqués par défaut et ne seront donc pas
+> sélectionnés par votre `Ctrl+A`. Ce n'est pas grave pour le déploiement — Render n'en
+> a pas besoin. Si vous tenez à l'inclure : sous macOS, affichez les fichiers cachés avec
+> `Cmd+Maj+.` ; sous Windows, onglet **Affichage** de l'explorateur → cochez
+> **Éléments masqués**.
+
+**d) Vérifier.** Rechargez la page d'accueil de votre dépôt. Vous devez voir, **à la
+racine**, les entrées `backend`, `frontend`, `Dockerfile`, `README.md` et `render.yaml`.
+Si `Dockerfile` est enfoui dans un sous-dossier, reprenez à l'étape a : c'est le piège
+signalé plus haut.
+
+C'est terminé, vous pouvez passer à l'étape suivante.
+
+> **Et pour les mises à jour ?** Pour modifier un fichier plus tard, ouvrez-le sur
+> GitHub, cliquez sur l'icône crayon, éditez, puis **Commit changes** : Render
+> redéploiera automatiquement. Pour remplacer plusieurs fichiers d'un coup, utilisez de
+> nouveau **Add file → Upload files**.
+
+> **Si vous voulez un jour travailler sur le code sans rien installer non plus**, ouvrez
+> votre dépôt sur GitHub et appuyez sur la touche **point** (`.`) : un éditeur de code
+> complet s'ouvre dans le navigateur. Pour aussi *exécuter* l'application dans le
+> navigateur, utilisez **Code → Codespaces → Create codespace**, qui vous donne une
+> machine de développement en ligne (offre gratuite mensuelle limitée).
 
 ### Étape 5.2 — Créer le service sur Render
 
@@ -291,6 +350,27 @@ partout. Un point d'exclamation orange vous le signale dans la liste de sélecti
 
 ---
 
+## 6 bis. Lire le planning des obsolescences
+
+La frise oppose deux dates que l'on confond souvent :
+
+- **La date limite** est subie : c'est la fin de support annoncée par l'éditeur.
+- **La date de traitement prévue** est votre engagement : c'est ce que vous avez planifié.
+
+Chaque barre représente le temps qu'il reste pour agir, d'aujourd'hui jusqu'à la fin de
+support. Sa couleur donne l'urgence : rouge si le support est déjà terminé, ambre à moins
+de trois mois, bleu à moins d'un an, vert au-delà. Le losange marque la date de traitement
+planifiée.
+
+**Le losange situé à droite de sa barre est le signal à surveiller** : il indique que vous
+avez planifié le traitement *après* la fin de support. C'est une dérive, comptée séparément
+dans les indicateurs. Elle peut être assumée — d'où le statut « Dérogation » — mais elle
+doit être vue et décidée, pas subie.
+
+Le regroupement **par composant** répond à une autre question que le regroupement par
+application : « si je décide de sortir de Java 8, combien d'applications dois-je embarquer,
+et laquelle me contraint le plus tôt ? »
+
 ## 7. Relances automatiques
 
 | Tâche | Quand | Contenu |
@@ -315,6 +395,8 @@ pratique pour vérifier le contenu avant de compter sur l'automatisme.
 | Les e-mails ne partent pas | SMTP non configuré | C'est le comportement normal en mode simulation : consultez l'historique dans le module Communication. |
 | La compilation échoue sur l'inlining des polices | pas d'accès à Google Fonts au moment du build | Déjà désactivé dans `angular.json` (`fonts.inline: false`). |
 | Premier accès très lent en ligne | service gratuit endormi | Attendez 30 à 60 secondes. |
+| Le fond s'affiche mais la page reste vide, ou le menu apparaît mais les boutons ne font rien | une ou plusieurs ressources du front sont introuvables sur le serveur | Ouvrez `https://VOTRE-SERVICE.onrender.com/api/diagnostic-front` : la réponse indique si le front compilé est complet et liste les ressources manquantes. |
+| `Ressource statique introuvable` dans la console du navigateur | le front compilé est incomplet ou périmé dans l'image | Relancez un déploiement dans Render (**Manual Deploy → Clear build cache & deploy**), puis rechargez avec `Ctrl+Shift+R`. |
 
 ---
 

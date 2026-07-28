@@ -20,7 +20,7 @@ import { IconeComponent } from '../shared/icone.component';
           santé des applications, dette de sécurité et capacité d'intervention.
         </p>
       </div>
-      <div class="horodatage mono">{{ maintenant | date: 'EEEE d MMMM y — HH:mm' : '' : 'fr' }}</div>
+      <div class="horodatage mono">{{ maintenant | date: 'EEEE d MMMM y — HH:mm' }}</div>
     </header>
 
     @if (stats(); as s) {
@@ -49,6 +49,14 @@ import { IconeComponent } from '../shared/icone.component';
           <div class="eyebrow">Documentation à jour</div>
           <div class="kpi__valeur">{{ s.taux_documentation }}<span class="unite">%</span></div>
           <div class="kpi__note">DAT, DEX, PRA, manuels…</div>
+        </div>
+        <div class="kpi carte carte--survol" [class.kpi--alerte]="s.nb_obsolescences_en_retard > 0">
+          <div class="eyebrow">Obsolescences actives</div>
+          <div class="kpi__valeur">{{ s.nb_obsolescences_actives }}</div>
+          <div class="kpi__note">
+            {{ s.nb_obsolescences_en_retard }} hors délai ·
+            {{ s.nb_obsolescences_90_jours }} sous 90 jours
+          </div>
         </div>
         <div class="kpi carte carte--survol">
           <div class="eyebrow">SBOM automatisé</div>

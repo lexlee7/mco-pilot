@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 
 from .models import (
     Application,
+    Dojo,
+    Obsolescence,
+    StatutObsolescence,
+    TypeDojo,
     CategorieTemplate,
     Criticite,
     DispositifSecurite,
@@ -161,6 +165,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sanity_check_mode=ModeSuivi.AUTOMATIQUE,
         sanity_check_commentaire="Scénario Selenium post-déploiement (12 contrôles).",
         habilitations="Groupe AD PROD_FIN_OPS + compte applicatif svc-fincore + accès bastion Wallix.",
+        dora=True,
+        expose_internet=False,
         editeur_id=partenaires["sapiens"].id,
     )
     rh = app_factory(
@@ -178,6 +184,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sanity_check_mode=ModeSuivi.MANUEL,
         sanity_check_commentaire="Check-list de 8 points réalisée par le métier.",
         habilitations="Groupe AD PROD_RH_OPS, validation RSSI requise pour tout accès aux données.",
+        dora=False,
+        expose_internet=False,
         editeur_id=partenaires["sapiens"].id,
     )
     crm = app_factory(
@@ -193,6 +201,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.AUTOMATIQUE,
         sanity_check_mode=ModeSuivi.AUTOMATIQUE,
         habilitations="Groupe AD PROD_CRM_SUPPORT.",
+        dora=False,
+        expose_internet=True,
         editeur_id=partenaires["novaflux"].id,
     )
     portail = app_factory(
@@ -209,6 +219,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.AUTOMATIQUE,
         sanity_check_mode=ModeSuivi.AUTOMATIQUE,
         habilitations="Groupe AD PROD_DIGITAL + double validation pour les modifications WAF.",
+        dora=True,
+        expose_internet=True,
         editeur_id=partenaires["novaflux"].id,
     )
     edi = app_factory(
@@ -224,6 +236,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.MANUEL,
         sanity_check_mode=ModeSuivi.AUTOMATIQUE,
         habilitations="Groupe AD PROD_EDI_OPS + certificat client pour les rejeux.",
+        dora=True,
+        expose_internet=True,
         editeur_id=partenaires["cloudops"].id,
     )
     bi = app_factory(
@@ -239,6 +253,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.NON,
         sanity_check_mode=ModeSuivi.MANUEL,
         habilitations="Groupe AD PROD_DATA_OPS.",
+        dora=False,
+        expose_internet=False,
     )
     ged = app_factory(
         code="GED-DOC",
@@ -252,6 +268,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.NON,
         sanity_check_mode=ModeSuivi.NON,
         habilitations="Groupe AD PROD_GED.",
+        dora=False,
+        expose_internet=False,
     )
     sso = app_factory(
         code="SEC-SSO",
@@ -266,6 +284,8 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         sbom_mode=ModeSuivi.AUTOMATIQUE,
         sanity_check_mode=ModeSuivi.AUTOMATIQUE,
         habilitations="Groupe AD PROD_IAM_ADMIN + validation RSSI systématique.",
+        dora=True,
+        expose_internet=True,
         editeur_id=partenaires["cloudops"].id,
     )
     db.flush()
@@ -383,6 +403,12 @@ def injecter_jeu_de_donnees(db: Session) -> None:
                     typologie=typologie,
                     etat=etat,
                     version=version,
+                    url=(
+                        f"https://documentation.intra.exemple.fr/{application.code.lower()}/"
+                        f"{typologie.value.lower()}"
+                        if version
+                        else None
+                    ),
                     date_maj=date.today() - timedelta(days=45) if version else None,
                 )
             )
@@ -483,6 +509,84 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         aujourdhui - timedelta(days=140), aujourdhui + timedelta(days=60), "Trivy",
         [(ged, StatutVulnerabilite.RISQUE_ACCEPTE, "1.2.4")],
     )
+
+    # ------------------------------------------------------------ Obsolescences
+    obsolescences = [
+        (finance, "Oracle Database", "12.2", "19c", -40, 60, StatutObsolescence.EN_COURS,
+         Criticite.VITALE, "15 j/h", "Sophie Vasseur"),
+        (finance, "Java Runtime", "8u382", "17.0.11", 120, 95, StatutObsolescence.PLANIFIEE,
+         Criticite.MAJEURE, "8 j/h", "Sophie Vasseur"),
+        (rh, "Windows Server", "2012 R2", "2022", -180, 45, StatutObsolescence.EN_COURS,
+         Criticite.VITALE, "20 j/h", "Karim Belhadj"),
+        (crm, "Java Runtime", "8u382", "17.0.11", 120, 210, StatutObsolescence.A_PLANIFIER,
+         Criticite.MAJEURE, "10 j/h", "Élodie Marchand"),
+        (crm, "Apache Tomcat", "8.5", "10.1", 60, None, StatutObsolescence.A_QUALIFIER,
+         Criticite.STANDARD, None, None),
+        (portail, "Angular", "14", "18", 30, 25, StatutObsolescence.PLANIFIEE,
+         Criticite.MAJEURE, "12 j/h", "Thomas Girard"),
+        (portail, "Node.js", "16", "20 LTS", -20, 10, StatutObsolescence.EN_COURS,
+         Criticite.VITALE, "5 j/h", "Thomas Girard"),
+        (edi, "Java Runtime", "8u382", "17.0.11", 120, 150, StatutObsolescence.A_PLANIFIER,
+         Criticite.VITALE, "18 j/h", "Nadia Perrin"),
+        (edi, "Oracle Database", "12.2", "19c", -40, 120, StatutObsolescence.A_PLANIFIER,
+         Criticite.VITALE, "12 j/h", "Nadia Perrin"),
+        (bi, "PostgreSQL", "11", "16", 200, None, StatutObsolescence.A_QUALIFIER,
+         Criticite.STANDARD, None, "Julien Ferrand"),
+        (bi, "Python", "3.8", "3.12", 90, 80, StatutObsolescence.PLANIFIEE,
+         Criticite.STANDARD, "6 j/h", "Julien Ferrand"),
+        (ged, "Apache Tomcat", "8.5", "10.1", 60, 300, StatutObsolescence.A_PLANIFIER,
+         Criticite.MINEURE, "4 j/h", "Alice Nguyen"),
+        (sso, "Windows Server", "2012 R2", "2022", -180, 30, StatutObsolescence.EN_COURS,
+         Criticite.VITALE, "14 j/h", "Marc Aubry"),
+        (sso, "OpenSSL", "1.1.1", "3.0", 15, 12, StatutObsolescence.PLANIFIEE,
+         Criticite.VITALE, "3 j/h", "Marc Aubry"),
+    ]
+    for application, composant, version, cible, ecart_limite, ecart_prevu, statut, crit, charge, porteur in obsolescences:
+        db.add(
+            Obsolescence(
+                application_id=application.id,
+                composant=composant,
+                version_obsolete=version,
+                version_cible=cible,
+                date_limite=date.today() + timedelta(days=ecart_limite),
+                date_traitement_prevue=(
+                    date.today() + timedelta(days=ecart_prevu) if ecart_prevu is not None else None
+                ),
+                statut=statut,
+                criticite=crit,
+                charge_estimee=charge,
+                porteur=porteur,
+            )
+        )
+
+    # ------------------------------------------------------------ DoJo (procédures filmées)
+    dojos = [
+        (finance, "Redémarrer le service applicatif", TypeDojo.REDEMARRAGE, "6 min", "Sophie Vasseur"),
+        (finance, "Contrôler la clôture comptable", TypeDojo.EXPLOITATION, "11 min", "Sophie Vasseur"),
+        (edi, "Rejouer un flux bancaire en échec", TypeDojo.INCIDENT, "9 min", "Nadia Perrin"),
+        (edi, "Vérifier la chaîne d'échanges du matin", TypeDojo.SUPERVISION, "7 min", "Nadia Perrin"),
+        (portail, "Basculer sur la page de maintenance", TypeDojo.EXPLOITATION, "4 min", "Thomas Girard"),
+        (portail, "Déployer un correctif en production", TypeDojo.DEPLOIEMENT, "14 min", "Thomas Girard"),
+        (sso, "Relancer le fournisseur d'identité", TypeDojo.REDEMARRAGE, "5 min", "Marc Aubry"),
+        (bi, "Relancer une alimentation en échec", TypeDojo.INCIDENT, "8 min", "Julien Ferrand"),
+        (rh, "Restaurer une sauvegarde de la veille", TypeDojo.SAUVEGARDE_RESTAURATION, "16 min", "Karim Belhadj"),
+    ]
+    for application, titre, type_dojo, duree, auteur in dojos:
+        db.add(
+            Dojo(
+                application_id=application.id,
+                titre=titre,
+                type=type_dojo,
+                url=(
+                    "https://videos.intra.exemple.fr/dojo/"
+                    f"{application.code.lower()}-{type_dojo.value.lower()}"
+                ),
+                duree=duree,
+                auteur=auteur,
+                date_maj=date.today() - timedelta(days=30),
+                description="Procédure filmée pas à pas, hébergée sur le portail vidéo interne.",
+            )
+        )
 
     # ------------------------------------------------------------ Calendrier
     lundi_prochain = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(

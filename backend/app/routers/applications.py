@@ -11,12 +11,15 @@ from ..models import (
     Criticite,
     DispositifSecurite,
     Document,
+    Dojo,
     Flux,
     PlageMaintenance,
     StatutApplication,
 )
 from ..schemas import (
     ApplicationCreate,
+    DojoCreate,
+    DojoRead,
     ApplicationDetail,
     ApplicationRead,
     ApplicationUpdate,
@@ -239,3 +242,75 @@ def supprimer_dispositif(app_id: int, dispositif_id: int, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Dispositif introuvable.")
     db.delete(dispositif)
     db.commit()
+
+
+# ------------------------------------------------------------------ DoJo (procédures filmées)
+@router.get("/{app_id}/dojos", response_model=list[DojoRead])
+def lister_dojos(app_id: int, db: Session = Depends(get_db)):
+    return _get_app(db, app_id).dojos
+
+
+@router.post("/{app_id}/dojos", response_model=DojoRead, status_code=201)
+def ajouter_dojo(app_id: int, payload: DojoCreate, db: Session = Depends(get_db)):
+    _get_app(db, app_id)
+    dojo = Dojo(application_id=app_id, **payload.model_dump())
+    db.add(dojo)
+    db.commit()
+    db.refresh(dojo)
+    return dojo
+
+
+@router.put("/{app_id}/dojos/{dojo_id}", response_model=DojoRead)
+def modifier_dojo(app_id: int, dojo_id: int, payload: DojoCreate, db: Session = Depends(get_db)):
+    dojo = db.get(Dojo, dojo_id)
+    if not dojo or dojo.application_id != app_id:
+        raise HTTPException(status_code=404, detail="DoJo introuvable.")
+    for cle, valeur in payload.model_dump().items():
+        setattr(dojo, cle, valeur)
+    db.commit()
+    db.refresh(dojo)
+    return dojo
+
+
+@router.delete("/{app_id}/dojos/{dojo_id}", status_code=204)
+def supprimer_dojo(app_id: int, dojo_id: int, db: Session = Depends(get_db)):
+    dojo = db.get(Dojo, dojo_id)
+    if not dojo or dojo.application_id != app_id:
+        raise HTTPException(status_code=404, detail="DoJo introuvable.")
+    db.delete(dojo)
+    db.commit()
+
+
+@router.get("/{app_id}/cartographie", tags=["Applications"])
+def cartographie_flux(app_id: int, db: Session = Depends(get_db)):
+    """Données de la cartographie des échanges : l'application au centre,
+    ses partenaires en entrée à gauche et en sortie à droite."""
+    app = _get_app(db, app_id)
+    entrants, sortants, bidirectionnels = [], [], []
+    for flux in app.flux:
+        noeud = {
+            "id": flux.id,
+            "nom": flux.nom,
+            "sens": flux.sens.value,
+            "frequence": flux.frequence.value,
+            "heure": flux.heure,
+            "jour": flux.jour,
+            "protocole": flux.protocole,
+            "bloquant": flux.bloquant,
+            "partenaire": flux.partenaire.nom if flux.partenaire else "Interne",
+            "partenaire_id": flux.partenaire_id,
+        }
+        if flux.sens.value == "ENTRANT":
+            entrants.append(noeud)
+        elif flux.sens.value == "SORTANT":
+            sortants.append(noeud)
+        else:
+            bidirectionnels.append(noeud)
+    return {
+        "application": {"id": app.id, "code": app.code, "nom": app.nom,
+                        "criticite": app.criticite.value, "statut": app.statut.value},
+        "entrants": entrants,
+        "sortants": sortants,
+        "bidirectionnels": bidirectionnels,
+        "nb_bloquants": sum(1 for f in app.flux if f.bloquant),
+    }

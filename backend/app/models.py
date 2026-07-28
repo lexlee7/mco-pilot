@@ -106,6 +106,25 @@ class StatutVulnerabilite(str, enum.Enum):
     FAUX_POSITIF = "FAUX_POSITIF"
 
 
+class StatutObsolescence(str, enum.Enum):
+    A_QUALIFIER = "A_QUALIFIER"
+    A_PLANIFIER = "A_PLANIFIER"
+    PLANIFIEE = "PLANIFIEE"
+    EN_COURS = "EN_COURS"
+    TRAITEE = "TRAITEE"
+    DEROGATION = "DEROGATION"
+
+
+class TypeDojo(str, enum.Enum):
+    EXPLOITATION = "EXPLOITATION"
+    REDEMARRAGE = "REDEMARRAGE"
+    SUPERVISION = "SUPERVISION"
+    DEPLOIEMENT = "DEPLOIEMENT"
+    INCIDENT = "INCIDENT"
+    SAUVEGARDE_RESTAURATION = "SAUVEGARDE_RESTAURATION"
+    AUTRE = "AUTRE"
+
+
 class TypeEvenement(str, enum.Enum):
     MAINTENANCE_TRANSVERSE = "MAINTENANCE_TRANSVERSE"
     COUPURE_RESEAU = "COUPURE_RESEAU"
@@ -210,6 +229,11 @@ class Application(Base):
     habilitations: Mapped[str | None] = mapped_column(Text)
     editeur_id: Mapped[int | None] = mapped_column(ForeignKey("partenaires.id", ondelete="SET NULL"))
 
+    # Périmètre réglementaire et exposition : deux marqueurs qui conditionnent
+    # les exigences de résilience et les délais de correction des failles.
+    dora: Mapped[bool] = mapped_column(Boolean, default=False)
+    expose_internet: Mapped[bool] = mapped_column(Boolean, default=False)
+
     cree_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     maj_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -225,6 +249,10 @@ class Application(Base):
     liens_vulnerabilites = relationship(
         "VulnerabiliteApplication", back_populates="application", cascade="all, delete-orphan"
     )
+    obsolescences = relationship(
+        "Obsolescence", back_populates="application", cascade="all, delete-orphan"
+    )
+    dojos = relationship("Dojo", back_populates="application", cascade="all, delete-orphan")
     evenements = relationship(
         "Evenement", secondary=evenement_application, back_populates="applications"
     )
@@ -305,6 +333,59 @@ class DispositifSecurite(Base):
     url_rapport: Mapped[str | None] = mapped_column(String(255))
 
     application = relationship("Application", back_populates="dispositifs")
+
+
+class Obsolescence(Base):
+    """Composant d'une application arrivant en fin de support.
+
+    À distinguer de la vulnérabilité : ici il n'y a pas de faille exploitable,
+    mais une échéance de fin de maintenance éditeur à anticiper.
+    """
+
+    __tablename__ = "obsolescences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    composant: Mapped[str] = mapped_column(String(120), index=True)
+    version_obsolete: Mapped[str] = mapped_column(String(60))
+    version_cible: Mapped[str | None] = mapped_column(String(60))
+    date_limite: Mapped[date | None] = mapped_column(Date)  # fin de support éditeur
+    date_traitement_prevue: Mapped[date | None] = mapped_column(Date)
+    date_traitement_reelle: Mapped[date | None] = mapped_column(Date)
+    statut: Mapped[StatutObsolescence] = mapped_column(
+        Enum(StatutObsolescence), default=StatutObsolescence.A_QUALIFIER
+    )
+    criticite: Mapped[Criticite] = mapped_column(Enum(Criticite), default=Criticite.STANDARD)
+    charge_estimee: Mapped[str | None] = mapped_column(String(60))
+    porteur: Mapped[str | None] = mapped_column(String(120))
+    commentaire: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="obsolescences")
+
+
+class Dojo(Base):
+    """Procédure filmée (« DoJo ») rattachée à une application.
+
+    La vidéo est hébergée ailleurs : on ne stocke ici que le lien et le contexte.
+    """
+
+    __tablename__ = "dojos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    titre: Mapped[str] = mapped_column(String(160))
+    type: Mapped[TypeDojo] = mapped_column(Enum(TypeDojo), default=TypeDojo.EXPLOITATION)
+    url: Mapped[str] = mapped_column(String(500))
+    duree: Mapped[str | None] = mapped_column(String(30))
+    auteur: Mapped[str | None] = mapped_column(String(120))
+    date_maj: Mapped[date | None] = mapped_column(Date)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="dojos")
 
 
 # --------------------------------------------------------------------------

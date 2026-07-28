@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import (
     CategorieTemplate,
+    StatutObsolescence,
+    TypeDojo,
     Criticite,
     EtatDocument,
     FrequenceFlux,
@@ -149,6 +151,8 @@ class ApplicationBase(BaseModel):
     sanity_check_commentaire: str | None = None
     habilitations: str | None = None
     editeur_id: int | None = None
+    dora: bool = False
+    expose_internet: bool = False
 
 
 class ApplicationCreate(ApplicationBase):
@@ -173,6 +177,8 @@ class ApplicationUpdate(BaseModel):
     sanity_check_commentaire: str | None = None
     habilitations: str | None = None
     editeur_id: int | None = None
+    dora: bool | None = None
+    expose_internet: bool | None = None
 
 
 class ApplicationRead(ApplicationBase):
@@ -190,6 +196,103 @@ class ApplicationDetail(ApplicationRead):
     documents: list[DocumentRead] = []
     dispositifs: list[DispositifRead] = []
     vulnerabilites: list["VulnerabiliteLiee"] = []
+    obsolescences: list["ObsolescenceRead"] = []
+    dojos: list["DojoRead"] = []
+
+
+# --------------------------------------------------------------------- Obsolescences
+class ObsolescenceBase(BaseModel):
+    composant: str
+    version_obsolete: str
+    version_cible: str | None = None
+    date_limite: date | None = None
+    date_traitement_prevue: date | None = None
+    date_traitement_reelle: date | None = None
+    statut: StatutObsolescence = StatutObsolescence.A_QUALIFIER
+    criticite: Criticite = Criticite.STANDARD
+    charge_estimee: str | None = None
+    porteur: str | None = None
+    commentaire: str | None = None
+
+
+class ObsolescenceCreate(ObsolescenceBase):
+    application_id: int
+
+
+class ObsolescenceUpdate(BaseModel):
+    composant: str | None = None
+    version_obsolete: str | None = None
+    version_cible: str | None = None
+    date_limite: date | None = None
+    date_traitement_prevue: date | None = None
+    date_traitement_reelle: date | None = None
+    statut: StatutObsolescence | None = None
+    criticite: Criticite | None = None
+    charge_estimee: str | None = None
+    porteur: str | None = None
+    commentaire: str | None = None
+    application_id: int | None = None
+
+
+class ObsolescenceRead(ObsolescenceBase):
+    model_config = ORM
+    id: int
+    application_id: int
+    code_application: str | None = None
+    nom_application: str | None = None
+    jours_restants: int | None = None
+    en_retard: bool = False
+    derive_planning: bool = False
+
+
+class LigneComposant(BaseModel):
+    """Regroupement du planning par composant technique."""
+
+    composant: str
+    nb_applications: int
+    nb_en_retard: int
+    echeance_la_plus_proche: date | None = None
+    obsolescences: list[ObsolescenceRead] = []
+
+
+class PlanningObsolescences(BaseModel):
+    debut: date
+    fin: date
+    nb_obsolescences: int
+    nb_en_retard: int
+    nb_sans_echeance: int
+    par_composant: list[LigneComposant] = []
+    par_application: list["LigneApplicationObso"] = []
+
+
+class LigneApplicationObso(BaseModel):
+    application_id: int
+    code: str
+    nom: str
+    criticite: Criticite
+    nb_en_retard: int
+    obsolescences: list[ObsolescenceRead] = []
+
+
+# --------------------------------------------------------------------- DoJo
+class DojoBase(BaseModel):
+    titre: str
+    type: TypeDojo = TypeDojo.EXPLOITATION
+    url: str
+    duree: str | None = None
+    auteur: str | None = None
+    date_maj: date | None = None
+    description: str | None = None
+
+
+class DojoCreate(DojoBase):
+    pass
+
+
+class DojoRead(DojoBase):
+    model_config = ORM
+    id: int
+    application_id: int
 
 
 # --------------------------------------------------------------------- Vulnérabilités
@@ -415,6 +518,9 @@ class DashboardStats(BaseModel):
     taux_documentation: float
     taux_sbom_automatise: float
     nb_evenements_semaine: int
+    nb_obsolescences_actives: int = 0
+    nb_obsolescences_en_retard: int = 0
+    nb_obsolescences_90_jours: int = 0
     repartition_statuts: list[RepartitionItem]
     repartition_criticites: list[RepartitionItem]
     repartition_gravites: list[RepartitionItem]
@@ -424,3 +530,4 @@ class DashboardStats(BaseModel):
 
 ApplicationDetail.model_rebuild()
 EvenementRead.model_rebuild()
+PlanningObsolescences.model_rebuild()

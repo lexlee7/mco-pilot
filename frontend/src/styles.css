@@ -197,20 +197,21 @@ textarea.saisie { resize: vertical; min-height: 84px; line-height: 1.55; }
   border-radius: 50%;
   background: currentColor;
 }
-.p-ok, .p-run, .p-corrigee, .p-a_jour, .p-faible, .p-automatique {
+.p-ok, .p-run, .p-corrigee, .p-a_jour, .p-faible, .p-automatique, .p-traitee {
   color: var(--menthe); background: rgba(53, 199, 154, 0.12); border-color: rgba(53, 199, 154, 0.3);
 }
-.p-alerte, .p-degrade, .p-en_cours, .p-moyenne, .p-majeure, .p-manuel, .p-obsolete {
+.p-alerte, .p-degrade, .p-en_cours, .p-moyenne, .p-majeure, .p-manuel, .p-obsolete,
+.p-a_planifier {
   color: var(--ambre); background: rgba(242, 163, 60, 0.12); border-color: rgba(242, 163, 60, 0.32);
 }
-.p-critique, .p-incident, .p-ouverte, .p-vitale, .p-manquant, .p-elevee {
+.p-critique, .p-incident, .p-ouverte, .p-vitale, .p-manquant, .p-elevee, .p-a_qualifier {
   color: var(--grenat); background: rgba(229, 72, 77, 0.12); border-color: rgba(229, 72, 77, 0.32);
 }
 .p-neutre, .p-standard, .p-mineure, .p-non, .p-decommissionnee, .p-non_applicable,
-.p-risque_accepte, .p-faux_positif, .p-maintenance {
+.p-risque_accepte, .p-faux_positif, .p-maintenance, .p-derogation {
   color: var(--texte-doux); background: var(--surface-forte); border-color: var(--bordure);
 }
-.p-info { color: var(--signal); background: var(--signal-sourd); border-color: rgba(91, 134, 255, 0.32); }
+.p-planifiee, .p-info { color: var(--signal); background: var(--signal-sourd); border-color: rgba(91, 134, 255, 0.32); }
 
 /* ------------------------------------------------------------------ Tableaux */
 .tableau { width: 100%; border-collapse: collapse; font-size: 14px; }

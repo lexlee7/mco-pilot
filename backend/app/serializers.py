@@ -3,16 +3,42 @@ from __future__ import annotations
 
 from datetime import date
 
-from .models import Application, StatutVulnerabilite, Vulnerabilite
+from .models import Application, Obsolescence, StatutObsolescence, StatutVulnerabilite, Vulnerabilite
 from .schemas import (
     ApplicationDetail,
     ApplicationImpactee,
     ApplicationRead,
+    ObsolescenceRead,
     VulnerabiliteLiee,
     VulnerabiliteRead,
 )
 
 STATUTS_ACTIFS = (StatutVulnerabilite.OUVERTE, StatutVulnerabilite.EN_COURS)
+OBSO_ACTIVES = (
+    StatutObsolescence.A_QUALIFIER,
+    StatutObsolescence.A_PLANIFIER,
+    StatutObsolescence.PLANIFIEE,
+    StatutObsolescence.EN_COURS,
+)
+
+
+def obsolescence_read(obso: Obsolescence) -> ObsolescenceRead:
+    """Ajoute les indicateurs calculés : reste à courir, retard, dérive de planning."""
+    data = ObsolescenceRead.model_validate(obso)
+    if obso.application is not None:
+        data.code_application = obso.application.code
+        data.nom_application = obso.application.nom
+    active = obso.statut in OBSO_ACTIVES
+    if obso.date_limite:
+        data.jours_restants = (obso.date_limite - date.today()).days
+        data.en_retard = active and obso.date_limite < date.today()
+        # Dérive : le traitement est planifié après la fin de support éditeur.
+        data.derive_planning = bool(
+            active
+            and obso.date_traitement_prevue
+            and obso.date_traitement_prevue > obso.date_limite
+        )
+    return data
 
 
 def compter_vulns_ouvertes(app: Application) -> int:
@@ -28,6 +54,8 @@ def application_read(app: Application) -> ApplicationRead:
 def application_detail(app: Application) -> ApplicationDetail:
     data = ApplicationDetail.model_validate(app)
     data.nb_vulnerabilites_ouvertes = compter_vulns_ouvertes(app)
+    data.obsolescences = [obsolescence_read(o) for o in app.obsolescences]
+    data.dojos = list(app.dojos)
     data.vulnerabilites = [
         VulnerabiliteLiee(
             id=lien.vulnerabilite.id,
