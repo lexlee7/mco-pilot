@@ -1,533 +1,482 @@
-"""Schémas Pydantic : contrat d'échange entre l'API et le front Angular."""
+"""Modèle de données du pilotage MCO."""
 from __future__ import annotations
 
-from datetime import date, datetime
+import enum
+from datetime import date, datetime, timezone
 
-from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .models import (
-    CategorieTemplate,
-    StatutObsolescence,
-    TypeDojo,
-    Criticite,
-    EtatDocument,
-    FrequenceFlux,
-    Gravite,
-    ModeSuivi,
-    SensFlux,
-    StatutApplication,
-    StatutVulnerabilite,
-    TypeDocument,
-    TypeEvenement,
-    TypePartenaire,
+from .database import Base
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# --------------------------------------------------------------------------
+# Énumérations métier
+# --------------------------------------------------------------------------
+class Criticite(str, enum.Enum):
+    VITALE = "VITALE"
+    MAJEURE = "MAJEURE"
+    STANDARD = "STANDARD"
+    MINEURE = "MINEURE"
+
+
+class StatutApplication(str, enum.Enum):
+    RUN = "RUN"
+    DEGRADE = "DEGRADE"
+    INCIDENT = "INCIDENT"
+    MAINTENANCE = "MAINTENANCE"
+    DECOMMISSIONNEE = "DECOMMISSIONNEE"
+
+
+class ModeSuivi(str, enum.Enum):
+    AUTOMATIQUE = "AUTOMATIQUE"
+    MANUEL = "MANUEL"
+    NON = "NON"
+
+
+class TypePartenaire(str, enum.Enum):
+    EDITEUR = "EDITEUR"
+    INTEGRATEUR = "INTEGRATEUR"
+    INFOGERANT = "INFOGERANT"
+    PARTENAIRE_FLUX = "PARTENAIRE_FLUX"
+
+
+class SensFlux(str, enum.Enum):
+    ENTRANT = "ENTRANT"
+    SORTANT = "SORTANT"
+    BIDIRECTIONNEL = "BIDIRECTIONNEL"
+
+
+class FrequenceFlux(str, enum.Enum):
+    TEMPS_REEL = "TEMPS_REEL"
+    HORAIRE = "HORAIRE"
+    QUOTIDIEN = "QUOTIDIEN"
+    HEBDOMADAIRE = "HEBDOMADAIRE"
+    MENSUEL = "MENSUEL"
+    A_LA_DEMANDE = "A_LA_DEMANDE"
+
+
+class TypeDocument(str, enum.Enum):
+    DAT = "DAT"
+    DEX = "DEX"
+    MANUEL_UTILISATEUR = "MANUEL_UTILISATEUR"
+    PROCEDURE_EXPLOITATION = "PROCEDURE_EXPLOITATION"
+    MATRICE_FLUX = "MATRICE_FLUX"
+    PRA_PCA = "PRA_PCA"
+    PLAN_REPRISE_DONNEES = "PLAN_REPRISE_DONNEES"
+    ANALYSE_RISQUE = "ANALYSE_RISQUE"
+
+
+class EtatDocument(str, enum.Enum):
+    A_JOUR = "A_JOUR"
+    OBSOLETE = "OBSOLETE"
+    EN_COURS = "EN_COURS"
+    MANQUANT = "MANQUANT"
+    NON_APPLICABLE = "NON_APPLICABLE"
+
+
+class Gravite(str, enum.Enum):
+    CRITIQUE = "CRITIQUE"
+    ELEVEE = "ELEVEE"
+    MOYENNE = "MOYENNE"
+    FAIBLE = "FAIBLE"
+
+
+class StatutVulnerabilite(str, enum.Enum):
+    OUVERTE = "OUVERTE"
+    EN_COURS = "EN_COURS"
+    CORRIGEE = "CORRIGEE"
+    RISQUE_ACCEPTE = "RISQUE_ACCEPTE"
+    FAUX_POSITIF = "FAUX_POSITIF"
+
+
+class StatutObsolescence(str, enum.Enum):
+    A_QUALIFIER = "A_QUALIFIER"
+    A_PLANIFIER = "A_PLANIFIER"
+    PLANIFIEE = "PLANIFIEE"
+    EN_COURS = "EN_COURS"
+    TRAITEE = "TRAITEE"
+    DEROGATION = "DEROGATION"
+
+
+class TypeDojo(str, enum.Enum):
+    EXPLOITATION = "EXPLOITATION"
+    REDEMARRAGE = "REDEMARRAGE"
+    SUPERVISION = "SUPERVISION"
+    DEPLOIEMENT = "DEPLOIEMENT"
+    INCIDENT = "INCIDENT"
+    SAUVEGARDE_RESTAURATION = "SAUVEGARDE_RESTAURATION"
+    AUTRE = "AUTRE"
+
+
+class TypeEvenement(str, enum.Enum):
+    MAINTENANCE_TRANSVERSE = "MAINTENANCE_TRANSVERSE"
+    COUPURE_RESEAU = "COUPURE_RESEAU"
+    FENETRE_TIR_INFRA = "FENETRE_TIR_INFRA"
+    GEL_PRODUCTION = "GEL_PRODUCTION"
+    MISE_EN_PRODUCTION = "MISE_EN_PRODUCTION"
+    AUTRE = "AUTRE"
+
+
+class CategorieTemplate(str, enum.Enum):
+    INCIDENT_OUVERTURE = "INCIDENT_OUVERTURE"
+    INCIDENT_SUIVI = "INCIDENT_SUIVI"
+    RETABLISSEMENT = "RETABLISSEMENT"
+    MAINTENANCE_PLANIFIEE = "MAINTENANCE_PLANIFIEE"
+    INFORMATION = "INFORMATION"
+
+
+# --------------------------------------------------------------------------
+# Tables d'association
+# --------------------------------------------------------------------------
+evenement_application = Table(
+    "evenement_application",
+    Base.metadata,
+    Column("evenement_id", ForeignKey("evenements.id", ondelete="CASCADE"), primary_key=True),
+    Column("application_id", ForeignKey("applications.id", ondelete="CASCADE"), primary_key=True),
 )
 
-ORM = ConfigDict(from_attributes=True)
 
-
-# --------------------------------------------------------------------- Partenaires
-class PartenaireBase(BaseModel):
-    nom: str
-    type: TypePartenaire = TypePartenaire.EDITEUR
-    contact_nom: str | None = None
-    contact_email: str | None = None
-    contact_telephone: str | None = None
-    support_url: str | None = None
-    escalade_n1: str | None = None
-    escalade_n2: str | None = None
-    reference_contrat: str | None = None
-    horaires_support: str | None = None
-    notes: str | None = None
-
-
-class PartenaireCreate(PartenaireBase):
-    pass
-
-
-class PartenaireRead(PartenaireBase):
-    model_config = ORM
-    id: int
-
-
-# --------------------------------------------------------------------- Plages
-class PlageBase(BaseModel):
-    libelle: str | None = None
-    jour_semaine: int = Field(ge=0, le=6)
-    heure_debut: str = Field(pattern=r"^\d{2}:\d{2}$")
-    heure_fin: str = Field(pattern=r"^\d{2}:\d{2}$")
-    validee_par_metier: bool = True
-
-
-class PlageCreate(PlageBase):
-    pass
-
-
-class PlageRead(PlageBase):
-    model_config = ORM
-    id: int
-    application_id: int
-
-
-# --------------------------------------------------------------------- Flux
-class FluxBase(BaseModel):
-    nom: str
-    sens: SensFlux = SensFlux.ENTRANT
-    frequence: FrequenceFlux = FrequenceFlux.QUOTIDIEN
-    heure: str | None = None
-    jour: str | None = None
-    protocole: str | None = None
-    partenaire_id: int | None = None
-    bloquant: bool = False
-    description: str | None = None
-
-
-class FluxCreate(FluxBase):
-    pass
-
-
-class FluxRead(FluxBase):
-    model_config = ORM
-    id: int
-    application_id: int
-    partenaire: PartenaireRead | None = None
-
-
-# --------------------------------------------------------------------- Documents
-class DocumentBase(BaseModel):
-    typologie: TypeDocument
-    etat: EtatDocument = EtatDocument.MANQUANT
-    url: str | None = None
-    version: str | None = None
-    date_maj: date | None = None
-    commentaire: str | None = None
-
-
-class DocumentCreate(DocumentBase):
-    pass
-
-
-class DocumentRead(DocumentBase):
-    model_config = ORM
-    id: int
-    application_id: int
-
-
-# --------------------------------------------------------------------- Sécurité
-class DispositifBase(BaseModel):
-    outil: str
-    type_scan: str | None = None
-    frequence: str | None = None
-    actif: bool = True
-    dernier_scan: date | None = None
-    url_rapport: str | None = None
-
-
-class DispositifCreate(DispositifBase):
-    pass
-
-
-class DispositifRead(DispositifBase):
-    model_config = ORM
-    id: int
-    application_id: int
-
-
-# --------------------------------------------------------------------- Applications
-class ApplicationBase(BaseModel):
-    code: str
-    nom: str
-    description: str | None = None
-    criticite: Criticite = Criticite.STANDARD
-    statut: StatutApplication = StatutApplication.RUN
-    responsable_nom: str | None = None
-    responsable_email: str | None = None
-    responsable_telephone: str | None = None
-    equipe: str | None = None
-    environnement_url: str | None = None
-    notes: str | None = None
-    sbom_mode: ModeSuivi = ModeSuivi.NON
-    sbom_commentaire: str | None = None
-    sanity_check_mode: ModeSuivi = ModeSuivi.NON
-    sanity_check_commentaire: str | None = None
-    habilitations: str | None = None
-    editeur_id: int | None = None
-    dora: bool = False
-    expose_internet: bool = False
-
-
-class ApplicationCreate(ApplicationBase):
-    pass
-
-
-class ApplicationUpdate(BaseModel):
-    code: str | None = None
-    nom: str | None = None
-    description: str | None = None
-    criticite: Criticite | None = None
-    statut: StatutApplication | None = None
-    responsable_nom: str | None = None
-    responsable_email: str | None = None
-    responsable_telephone: str | None = None
-    equipe: str | None = None
-    environnement_url: str | None = None
-    notes: str | None = None
-    sbom_mode: ModeSuivi | None = None
-    sbom_commentaire: str | None = None
-    sanity_check_mode: ModeSuivi | None = None
-    sanity_check_commentaire: str | None = None
-    habilitations: str | None = None
-    editeur_id: int | None = None
-    dora: bool | None = None
-    expose_internet: bool | None = None
-
-
-class ApplicationRead(ApplicationBase):
-    model_config = ORM
-    id: int
-    cree_le: datetime
-    maj_le: datetime
-    editeur: PartenaireRead | None = None
-    plages: list[PlageRead] = []
-    nb_vulnerabilites_ouvertes: int = 0
-
-
-class ApplicationDetail(ApplicationRead):
-    flux: list[FluxRead] = []
-    documents: list[DocumentRead] = []
-    dispositifs: list[DispositifRead] = []
-    vulnerabilites: list["VulnerabiliteLiee"] = []
-    obsolescences: list["ObsolescenceRead"] = []
-    dojos: list["DojoRead"] = []
-
-
-# --------------------------------------------------------------------- Obsolescences
-class ObsolescenceBase(BaseModel):
-    composant: str
-    version_obsolete: str
-    version_cible: str | None = None
-    date_limite: date | None = None
-    date_traitement_prevue: date | None = None
-    date_traitement_reelle: date | None = None
-    statut: StatutObsolescence = StatutObsolescence.A_QUALIFIER
-    criticite: Criticite = Criticite.STANDARD
-    charge_estimee: str | None = None
-    porteur: str | None = None
-    commentaire: str | None = None
-
-
-class ObsolescenceCreate(ObsolescenceBase):
-    application_id: int
-
-
-class ObsolescenceUpdate(BaseModel):
-    composant: str | None = None
-    version_obsolete: str | None = None
-    version_cible: str | None = None
-    date_limite: date | None = None
-    date_traitement_prevue: date | None = None
-    date_traitement_reelle: date | None = None
-    statut: StatutObsolescence | None = None
-    criticite: Criticite | None = None
-    charge_estimee: str | None = None
-    porteur: str | None = None
-    commentaire: str | None = None
-    application_id: int | None = None
-
-
-class ObsolescenceRead(ObsolescenceBase):
-    model_config = ORM
-    id: int
-    application_id: int
-    code_application: str | None = None
-    nom_application: str | None = None
-    jours_restants: int | None = None
-    en_retard: bool = False
-    derive_planning: bool = False
-
-
-class LigneComposant(BaseModel):
-    """Regroupement du planning par composant technique."""
-
-    composant: str
-    nb_applications: int
-    nb_en_retard: int
-    echeance_la_plus_proche: date | None = None
-    obsolescences: list[ObsolescenceRead] = []
-
-
-class PlanningObsolescences(BaseModel):
-    debut: date
-    fin: date
-    nb_obsolescences: int
-    nb_en_retard: int
-    nb_sans_echeance: int
-    par_composant: list[LigneComposant] = []
-    par_application: list["LigneApplicationObso"] = []
-
-
-class LigneApplicationObso(BaseModel):
-    application_id: int
-    code: str
-    nom: str
-    criticite: Criticite
-    nb_en_retard: int
-    obsolescences: list[ObsolescenceRead] = []
-
-
-# --------------------------------------------------------------------- DoJo
-class DojoBase(BaseModel):
-    titre: str
-    type: TypeDojo = TypeDojo.EXPLOITATION
-    url: str
-    duree: str | None = None
-    auteur: str | None = None
-    date_maj: date | None = None
-    description: str | None = None
-
-
-class DojoCreate(DojoBase):
-    pass
-
-
-class DojoRead(DojoBase):
-    model_config = ORM
-    id: int
-    application_id: int
-
-
-# --------------------------------------------------------------------- Vulnérabilités
-class LienApplication(BaseModel):
-    application_id: int
-    statut: StatutVulnerabilite = StatutVulnerabilite.OUVERTE
-    version_installee: str | None = None
-    date_correction_prevue: date | None = None
-    commentaire: str | None = None
-
-
-class VulnerabiliteBase(BaseModel):
-    reference: str
-    titre: str
-    composant: str
-    versions_touchees: str | None = None
-    version_cible: str | None = None
-    gravite: Gravite = Gravite.MOYENNE
-    score_cvss: float | None = None
-    statut: StatutVulnerabilite = StatutVulnerabilite.OUVERTE
-    date_detection: date | None = None
-    date_echeance: date | None = None
-    source: str | None = None
-    description: str | None = None
-    plan_action: str | None = None
-
-
-class VulnerabiliteCreate(VulnerabiliteBase):
-    applications: list[LienApplication] = []
-
-
-class VulnerabiliteUpdate(BaseModel):
-    reference: str | None = None
-    titre: str | None = None
-    composant: str | None = None
-    versions_touchees: str | None = None
-    version_cible: str | None = None
-    gravite: Gravite | None = None
-    score_cvss: float | None = None
-    statut: StatutVulnerabilite | None = None
-    date_echeance: date | None = None
-    source: str | None = None
-    description: str | None = None
-    plan_action: str | None = None
-    applications: list[LienApplication] | None = None
-
-
-class ApplicationImpactee(BaseModel):
-    application_id: int
-    code: str
-    nom: str
-    responsable_email: str | None = None
-    statut: StatutVulnerabilite
-    version_installee: str | None = None
-    date_correction_prevue: date | None = None
-    commentaire: str | None = None
-
-
-class VulnerabiliteRead(VulnerabiliteBase):
-    model_config = ORM
-    id: int
-    date_detection: date
-    age_jours: int = 0
-    applications: list[ApplicationImpactee] = []
-
-
-class VulnerabiliteLiee(BaseModel):
-    """Vue d'une vulnérabilité depuis la fiche application."""
-
-    id: int
-    reference: str
-    titre: str
-    composant: str
-    gravite: Gravite
-    version_cible: str | None = None
-    statut: StatutVulnerabilite
-    date_echeance: date | None = None
-    age_jours: int = 0
-
-
-# --------------------------------------------------------------------- Moteur de plages
-class RechercheePlageRequest(BaseModel):
-    application_ids: list[int] = []
-    tout_le_parc: bool = False
-    duree_minutes: int = 120
-    tolerance_conflits: int = 0
-    jours_autorises: list[int] | None = None  # 0=lundi
-    heure_min: str | None = None  # borne basse "20:00"
-    heure_max: str | None = None  # borne haute "06:00"
-
-
-class ConflitDetail(BaseModel):
-    application_id: int
-    code: str
-    nom: str
-    criticite: Criticite
-    raison: str
-
-
-class CreneauPropose(BaseModel):
-    jour_semaine: int
-    jour_libelle: str
-    heure_debut: str
-    heure_fin: str
-    duree_minutes: int
-    nb_conflits: int
-    parfait: bool
-    applications_couvertes: list[str]
-    conflits: list[ConflitDetail]
-    resume: str
-
-
-class RechercheePlageResponse(BaseModel):
-    nb_applications: int
-    duree_demandee: int
-    tolerance: int
-    creneaux: list[CreneauPropose]
-    message: str
-
-
-# --------------------------------------------------------------------- Événements
-class EvenementBase(BaseModel):
-    titre: str
-    type: TypeEvenement = TypeEvenement.AUTRE
-    debut: datetime
-    fin: datetime
-    impact: str | None = None
-    pilote: str | None = None
-    description: str | None = None
-
-
-class EvenementCreate(EvenementBase):
-    application_ids: list[int] = []
-
-
-class EvenementRead(EvenementBase):
-    model_config = ORM
-    id: int
-    applications: list["ApplicationMini"] = []
-
-
-class ApplicationMini(BaseModel):
-    model_config = ORM
-    id: int
-    code: str
-    nom: str
-
-
-# --------------------------------------------------------------------- Communication
-class ListeDiffusionBase(BaseModel):
-    nom: str
-    description: str | None = None
-    destinataires: str = ""
-
-
-class ListeDiffusionCreate(ListeDiffusionBase):
-    pass
-
-
-class ListeDiffusionRead(ListeDiffusionBase):
-    model_config = ORM
-    id: int
-    nb_destinataires: int = 0
-
-
-class TemplateBase(BaseModel):
-    nom: str
-    categorie: CategorieTemplate = CategorieTemplate.INCIDENT_OUVERTURE
-    sujet: str
-    corps_html: str
-    variables: str | None = None
-
-
-class TemplateCreate(TemplateBase):
-    pass
-
-
-class TemplateRead(TemplateBase):
-    model_config = ORM
-    id: int
-
-
-class EnvoiCommunicationRequest(BaseModel):
-    template_id: int | None = None
-    sujet: str
-    corps_html: str
-    liste_ids: list[int] = []
-    destinataires_supplementaires: str = ""
-    application_id: int | None = None
-    test_uniquement: bool = False
-
-
-class EnvoiCommunicationResponse(BaseModel):
-    statut: str
-    nb_destinataires: int
-    destinataires: list[str]
-    detail: str
-
-
-class CommunicationRead(BaseModel):
-    model_config = ORM
-    id: int
-    sujet: str
-    destinataires: str
-    envoye_le: datetime
-    statut_envoi: str
-    application_id: int | None = None
-
-
-# --------------------------------------------------------------------- Dashboard
-class RepartitionItem(BaseModel):
-    cle: str
-    valeur: int
-
-
-class DashboardStats(BaseModel):
-    nb_applications: int
-    nb_applications_vitales: int
-    nb_vulnerabilites_ouvertes: int
-    nb_vulnerabilites_critiques: int
-    nb_vulnerabilites_hors_delai: int
-    age_moyen_vulnerabilites: float
-    taux_documentation: float
-    taux_sbom_automatise: float
-    nb_evenements_semaine: int
-    nb_obsolescences_actives: int = 0
-    nb_obsolescences_en_retard: int = 0
-    nb_obsolescences_90_jours: int = 0
-    repartition_statuts: list[RepartitionItem]
-    repartition_criticites: list[RepartitionItem]
-    repartition_gravites: list[RepartitionItem]
-    couverture_plages: list[RepartitionItem]
-    applications_a_risque: list[ApplicationMini]
-
-
-ApplicationDetail.model_rebuild()
-EvenementRead.model_rebuild()
-PlanningObsolescences.model_rebuild()
+class VulnerabiliteApplication(Base):
+    """Lien vulnérabilité <-> application, porteur de l'avancement du correctif."""
+
+    __tablename__ = "vulnerabilite_application"
+    __table_args__ = (UniqueConstraint("vulnerabilite_id", "application_id", name="uq_vuln_app"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vulnerabilite_id: Mapped[int] = mapped_column(
+        ForeignKey("vulnerabilites.id", ondelete="CASCADE"), index=True
+    )
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    statut: Mapped[StatutVulnerabilite] = mapped_column(
+        Enum(StatutVulnerabilite), default=StatutVulnerabilite.OUVERTE
+    )
+    version_installee: Mapped[str | None] = mapped_column(String(60))
+    date_correction_prevue: Mapped[date | None] = mapped_column(Date)
+    commentaire: Mapped[str | None] = mapped_column(Text)
+
+    vulnerabilite = relationship("Vulnerabilite", back_populates="liens")
+    application = relationship("Application", back_populates="liens_vulnerabilites")
+
+
+# --------------------------------------------------------------------------
+# Référentiel éditeurs / partenaires
+# --------------------------------------------------------------------------
+class Partenaire(Base):
+    __tablename__ = "partenaires"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    type: Mapped[TypePartenaire] = mapped_column(Enum(TypePartenaire), default=TypePartenaire.EDITEUR)
+    contact_nom: Mapped[str | None] = mapped_column(String(120))
+    contact_email: Mapped[str | None] = mapped_column(String(160))
+    contact_telephone: Mapped[str | None] = mapped_column(String(40))
+    support_url: Mapped[str | None] = mapped_column(String(255))
+    escalade_n1: Mapped[str | None] = mapped_column(String(255))
+    escalade_n2: Mapped[str | None] = mapped_column(String(255))
+    reference_contrat: Mapped[str | None] = mapped_column(String(120))
+    horaires_support: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    applications = relationship("Application", back_populates="editeur")
+    flux = relationship("Flux", back_populates="partenaire")
+
+
+# --------------------------------------------------------------------------
+# Application
+# --------------------------------------------------------------------------
+class Application(Base):
+    __tablename__ = "applications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    criticite: Mapped[Criticite] = mapped_column(Enum(Criticite), default=Criticite.STANDARD)
+    statut: Mapped[StatutApplication] = mapped_column(
+        Enum(StatutApplication), default=StatutApplication.RUN
+    )
+    responsable_nom: Mapped[str | None] = mapped_column(String(120))
+    responsable_email: Mapped[str | None] = mapped_column(String(160))
+    responsable_telephone: Mapped[str | None] = mapped_column(String(40))
+    equipe: Mapped[str | None] = mapped_column(String(120))
+    environnement_url: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    sbom_mode: Mapped[ModeSuivi] = mapped_column(Enum(ModeSuivi), default=ModeSuivi.NON)
+    sbom_commentaire: Mapped[str | None] = mapped_column(String(255))
+    sanity_check_mode: Mapped[ModeSuivi] = mapped_column(Enum(ModeSuivi), default=ModeSuivi.NON)
+    sanity_check_commentaire: Mapped[str | None] = mapped_column(String(255))
+
+    habilitations: Mapped[str | None] = mapped_column(Text)
+    editeur_id: Mapped[int | None] = mapped_column(ForeignKey("partenaires.id", ondelete="SET NULL"))
+
+    # Périmètre réglementaire et exposition : deux marqueurs qui conditionnent
+    # les exigences de résilience et les délais de correction des failles.
+    dora: Mapped[bool] = mapped_column(Boolean, default=False)
+    expose_internet: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    cree_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    maj_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    editeur = relationship("Partenaire", back_populates="applications")
+    plages = relationship(
+        "PlageMaintenance", back_populates="application", cascade="all, delete-orphan"
+    )
+    flux = relationship("Flux", back_populates="application", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="application", cascade="all, delete-orphan")
+    dispositifs = relationship(
+        "DispositifSecurite", back_populates="application", cascade="all, delete-orphan"
+    )
+    liens_vulnerabilites = relationship(
+        "VulnerabiliteApplication", back_populates="application", cascade="all, delete-orphan"
+    )
+    obsolescences = relationship(
+        "Obsolescence", back_populates="application", cascade="all, delete-orphan"
+    )
+    dojos = relationship("Dojo", back_populates="application", cascade="all, delete-orphan")
+    evenements = relationship(
+        "Evenement", secondary=evenement_application, back_populates="applications"
+    )
+
+
+class PlageMaintenance(Base):
+    """Plage hebdomadaire récurrente pendant laquelle l'application est arrêtable."""
+
+    __tablename__ = "plages_maintenance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    libelle: Mapped[str | None] = mapped_column(String(120))
+    jour_semaine: Mapped[int] = mapped_column(Integer)  # 0 = lundi ... 6 = dimanche
+    heure_debut: Mapped[str] = mapped_column(String(5))  # "22:00"
+    heure_fin: Mapped[str] = mapped_column(String(5))  # "02:00" (passage minuit géré)
+    validee_par_metier: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    application = relationship("Application", back_populates="plages")
+
+
+class Flux(Base):
+    __tablename__ = "flux"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    nom: Mapped[str] = mapped_column(String(120))
+    sens: Mapped[SensFlux] = mapped_column(Enum(SensFlux), default=SensFlux.ENTRANT)
+    frequence: Mapped[FrequenceFlux] = mapped_column(
+        Enum(FrequenceFlux), default=FrequenceFlux.QUOTIDIEN
+    )
+    heure: Mapped[str | None] = mapped_column(String(5))
+    jour: Mapped[str | None] = mapped_column(String(40))
+    protocole: Mapped[str | None] = mapped_column(String(40))
+    partenaire_id: Mapped[int | None] = mapped_column(
+        ForeignKey("partenaires.id", ondelete="SET NULL")
+    )
+    bloquant: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="flux")
+    partenaire = relationship("Partenaire", back_populates="flux")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    typologie: Mapped[TypeDocument] = mapped_column(Enum(TypeDocument))
+    etat: Mapped[EtatDocument] = mapped_column(Enum(EtatDocument), default=EtatDocument.MANQUANT)
+    url: Mapped[str | None] = mapped_column(String(255))
+    version: Mapped[str | None] = mapped_column(String(30))
+    date_maj: Mapped[date | None] = mapped_column(Date)
+    commentaire: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="documents")
+
+
+class DispositifSecurite(Base):
+    __tablename__ = "dispositifs_securite"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    outil: Mapped[str] = mapped_column(String(80))  # SonarQube, JFrog Xray, Dependabot...
+    type_scan: Mapped[str | None] = mapped_column(String(80))  # SAST, SCA, DAST, secrets...
+    frequence: Mapped[str | None] = mapped_column(String(60))
+    actif: Mapped[bool] = mapped_column(Boolean, default=True)
+    dernier_scan: Mapped[date | None] = mapped_column(Date)
+    url_rapport: Mapped[str | None] = mapped_column(String(255))
+
+    application = relationship("Application", back_populates="dispositifs")
+
+
+class Obsolescence(Base):
+    """Composant d'une application arrivant en fin de support.
+
+    À distinguer de la vulnérabilité : ici il n'y a pas de faille exploitable,
+    mais une échéance de fin de maintenance éditeur à anticiper.
+    """
+
+    __tablename__ = "obsolescences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    composant: Mapped[str] = mapped_column(String(120), index=True)
+    version_obsolete: Mapped[str] = mapped_column(String(60))
+    version_cible: Mapped[str | None] = mapped_column(String(60))
+    date_limite: Mapped[date | None] = mapped_column(Date)  # fin de support éditeur
+    date_traitement_prevue: Mapped[date | None] = mapped_column(Date)
+    date_traitement_reelle: Mapped[date | None] = mapped_column(Date)
+    statut: Mapped[StatutObsolescence] = mapped_column(
+        Enum(StatutObsolescence), default=StatutObsolescence.A_QUALIFIER
+    )
+    criticite: Mapped[Criticite] = mapped_column(Enum(Criticite), default=Criticite.STANDARD)
+    charge_estimee: Mapped[str | None] = mapped_column(String(60))
+    porteur: Mapped[str | None] = mapped_column(String(120))
+    commentaire: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="obsolescences")
+
+
+class Dojo(Base):
+    """Procédure filmée (« DoJo ») rattachée à une application.
+
+    La vidéo est hébergée ailleurs : on ne stocke ici que le lien et le contexte.
+    """
+
+    __tablename__ = "dojos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    titre: Mapped[str] = mapped_column(String(160))
+    type: Mapped[TypeDojo] = mapped_column(Enum(TypeDojo), default=TypeDojo.EXPLOITATION)
+    url: Mapped[str] = mapped_column(String(500))
+    duree: Mapped[str | None] = mapped_column(String(30))
+    auteur: Mapped[str | None] = mapped_column(String(120))
+    date_maj: Mapped[date | None] = mapped_column(Date)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    application = relationship("Application", back_populates="dojos")
+
+
+# --------------------------------------------------------------------------
+# Vulnérabilités
+# --------------------------------------------------------------------------
+class Vulnerabilite(Base):
+    __tablename__ = "vulnerabilites"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reference: Mapped[str] = mapped_column(String(60), index=True)  # CVE-2024-XXXX
+    titre: Mapped[str] = mapped_column(String(200))
+    composant: Mapped[str] = mapped_column(String(120))
+    versions_touchees: Mapped[str | None] = mapped_column(String(120))
+    version_cible: Mapped[str | None] = mapped_column(String(60))
+    gravite: Mapped[Gravite] = mapped_column(Enum(Gravite), default=Gravite.MOYENNE)
+    score_cvss: Mapped[float | None] = mapped_column()
+    statut: Mapped[StatutVulnerabilite] = mapped_column(
+        Enum(StatutVulnerabilite), default=StatutVulnerabilite.OUVERTE
+    )
+    date_detection: Mapped[date] = mapped_column(Date, default=date.today)
+    date_echeance: Mapped[date | None] = mapped_column(Date)
+    source: Mapped[str | None] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(Text)
+    plan_action: Mapped[str | None] = mapped_column(Text)
+
+    liens = relationship(
+        "VulnerabiliteApplication", back_populates="vulnerabilite", cascade="all, delete-orphan"
+    )
+
+
+# --------------------------------------------------------------------------
+# Calendrier MCO
+# --------------------------------------------------------------------------
+class Evenement(Base):
+    __tablename__ = "evenements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    titre: Mapped[str] = mapped_column(String(160))
+    type: Mapped[TypeEvenement] = mapped_column(Enum(TypeEvenement), default=TypeEvenement.AUTRE)
+    debut: Mapped[datetime] = mapped_column(DateTime)
+    fin: Mapped[datetime] = mapped_column(DateTime)
+    impact: Mapped[str | None] = mapped_column(String(255))
+    pilote: Mapped[str | None] = mapped_column(String(120))
+    description: Mapped[str | None] = mapped_column(Text)
+
+    applications = relationship(
+        "Application", secondary=evenement_application, back_populates="evenements"
+    )
+
+
+# --------------------------------------------------------------------------
+# Communication de crise
+# --------------------------------------------------------------------------
+class ListeDiffusion(Base):
+    __tablename__ = "listes_diffusion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nom: Mapped[str] = mapped_column(String(120), unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    destinataires: Mapped[str] = mapped_column(Text, default="")  # emails séparés par ; ou saut de ligne
+
+    def emails(self) -> list[str]:
+        raw = (self.destinataires or "").replace(",", ";").replace("\n", ";")
+        return [e.strip() for e in raw.split(";") if e.strip()]
+
+
+class TemplateCommunication(Base):
+    __tablename__ = "templates_communication"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nom: Mapped[str] = mapped_column(String(120), unique=True)
+    categorie: Mapped[CategorieTemplate] = mapped_column(
+        Enum(CategorieTemplate), default=CategorieTemplate.INCIDENT_OUVERTURE
+    )
+    sujet: Mapped[str] = mapped_column(String(200))
+    corps_html: Mapped[str] = mapped_column(Text)
+    variables: Mapped[str | None] = mapped_column(String(255))
+
+
+class Communication(Base):
+    """Historique des messages envoyés."""
+
+    __tablename__ = "communications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sujet: Mapped[str] = mapped_column(String(200))
+    corps_html: Mapped[str] = mapped_column(Text)
+    destinataires: Mapped[str] = mapped_column(Text)
+    application_id: Mapped[int | None] = mapped_column(
+        ForeignKey("applications.id", ondelete="SET NULL")
+    )
+    envoye_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    statut_envoi: Mapped[str] = mapped_column(String(40), default="ENVOYE")
+    detail_envoi: Mapped[str | None] = mapped_column(Text)
