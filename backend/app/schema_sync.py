@@ -1,205 +1,105 @@
-"""Point d'entrée de l'API de pilotage MCO."""
+"""Synchronisation légère du schéma de base de données.
+
+Problème résolu ici : `Base.metadata.create_all()` sait créer les tables absentes,
+mais il ne touche jamais à une table qui existe déjà. Quand on ajoute un champ à un
+modèle (par exemple `dora` sur les applications), la base d'un environnement déjà
+déployé conserve son ancienne structure, et l'application s'arrête au démarrage sur
+une erreur « column ... does not exist ».
+
+Cette fonction compare le modèle et la base réelle, puis ajoute les colonnes
+manquantes. Elle ne supprime rien et ne modifie aucune colonne existante : c'est
+volontairement une migration additive, sans risque pour les données en place.
+
+Pour un usage plus exigeant (renommages, changements de type, retours arrière),
+l'outil de référence est Alembic. Il est ici délibérément évité pour ne pas imposer
+une étape de commande supplémentaire.
+"""
 from __future__ import annotations
 
 import logging
-import os
-import re
-from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from sqlalchemy import Boolean, Engine, inspect, text
+from sqlalchemy.schema import Column
 
-from . import models  # noqa: F401 (import nécessaire pour créer les tables)
-from .database import Base, SessionLocal, engine
-from .schema_sync import synchroniser_schema
-from .routers import applications, communication, dashboard, evenements, maintenance
-from .routers import obsolescences, partenaires, vulnerabilites
-from .services.scheduler import arreter_scheduler, demarrer_scheduler
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-logger = logging.getLogger("mco")
-
-DOSSIER_STATIQUE = Path(__file__).resolve().parent.parent / "static"
+logger = logging.getLogger("mco.schema")
 
 
-@asynccontextmanager
-async def cycle_de_vie(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    # create_all ne modifie pas les tables déjà présentes : on complète les
-    # colonnes ajoutées depuis le précédent déploiement.
-    synchroniser_schema(engine, Base.metadata)
-    if os.getenv("SEED_ON_STARTUP", "true").lower() == "true":
-        from .seed import injecter_jeu_de_donnees
+def _valeur_par_defaut(colonne: Column) -> str | None:
+    """Traduit la valeur par défaut du modèle en littéral SQL.
 
-        db = SessionLocal()
-        try:
-            injecter_jeu_de_donnees(db)
-        finally:
-            db.close()
-    demarrer_scheduler()
-    logger.info("API MCO prête.")
-    yield
-    arreter_scheduler()
-
-
-app = FastAPI(
-    title="Pilotage MCO",
-    description="API de maintien en condition opérationnelle d'un parc applicatif.",
-    version="1.0.0",
-    lifespan=cycle_de_vie,
-)
-
-origines = os.getenv("CORS_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in origines if o.strip()] or ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(dashboard.router)
-app.include_router(applications.router)
-app.include_router(partenaires.router)
-app.include_router(vulnerabilites.router)
-app.include_router(obsolescences.router)
-app.include_router(maintenance.router)
-app.include_router(evenements.router)
-app.include_router(communication.router)
-
-
-@app.get("/api/sante", tags=["Système"])
-def sante():
-    return {"statut": "ok", "service": "pilotage-mco"}
-
-
-@app.get("/api/diagnostic-base", tags=["Système"])
-def diagnostic_base():
-    """Compare la structure attendue par les modèles et celle réellement en base.
-
-    À consulter si l'application refuse de démarrer sur une erreur de colonne
-    inexistante après une mise à jour.
+    Indispensable pour les colonnes obligatoires : une base qui contient déjà des
+    lignes refuse l'ajout d'une colonne NOT NULL sans valeur de repli.
     """
-    from sqlalchemy import inspect as inspecter
+    defaut = colonne.default
+    if defaut is None or getattr(defaut, "is_callable", False):
+        if colonne.nullable:
+            return None
+        # Colonne obligatoire sans défaut déclaré : on en fabrique un neutre.
+        if isinstance(colonne.type, Boolean):
+            return "false"
+        return "0" if colonne.type.python_type in (int, float) else "''"
 
-    inspecteur = inspecter(engine)
-    tables_attendues = set(Base.metadata.tables)
-    tables_reelles = set(inspecteur.get_table_names())
-
-    ecarts = []
-    for nom in sorted(tables_attendues & tables_reelles):
-        attendues = {c.name for c in Base.metadata.tables[nom].columns}
-        reelles = {c["name"] for c in inspecteur.get_columns(nom)}
-        manquantes = sorted(attendues - reelles)
-        if manquantes:
-            ecarts.append({"table": nom, "colonnes_manquantes": manquantes})
-
-    return {
-        "moteur": engine.dialect.name,
-        "tables_manquantes": sorted(tables_attendues - tables_reelles),
-        "ecarts_colonnes": ecarts,
-        "diagnostic": (
-            "Structure conforme aux modèles."
-            if not ecarts and tables_attendues <= tables_reelles
-            else "Structure incomplète : redémarrez le service pour lancer la synchronisation."
-        ),
-    }
+    valeur = getattr(defaut, "arg", None)
+    if callable(valeur):
+        return None
+    if isinstance(valeur, bool):
+        return "true" if valeur else "false"
+    if isinstance(valeur, (int, float)):
+        return str(valeur)
+    if valeur is None:
+        return None
+    return "'" + str(getattr(valeur, "value", valeur)).replace("'", "''") + "'"
 
 
-@app.get("/api/referentiels", tags=["Système"])
-def referentiels():
-    """Toutes les valeurs d'énumération, pour alimenter les listes déroulantes du front."""
-    return {
-        "criticites": [e.value for e in models.Criticite],
-        "statuts_application": [e.value for e in models.StatutApplication],
-        "modes_suivi": [e.value for e in models.ModeSuivi],
-        "types_partenaire": [e.value for e in models.TypePartenaire],
-        "sens_flux": [e.value for e in models.SensFlux],
-        "frequences_flux": [e.value for e in models.FrequenceFlux],
-        "types_document": [e.value for e in models.TypeDocument],
-        "etats_document": [e.value for e in models.EtatDocument],
-        "gravites": [e.value for e in models.Gravite],
-        "statuts_vulnerabilite": [e.value for e in models.StatutVulnerabilite],
-        "types_evenement": [e.value for e in models.TypeEvenement],
-        "statuts_obsolescence": [e.value for e in models.StatutObsolescence],
-        "types_dojo": [e.value for e in models.TypeDojo],
-        "categories_template": [e.value for e in models.CategorieTemplate],
-    }
+def synchroniser_schema(engine: Engine, metadata) -> list[str]:
+    """Ajoute à la base les colonnes présentes dans les modèles mais absentes des tables.
 
-
-# --------------------------------------------------------------------------
-# Service du front Angular compilé (déploiement en une seule instance Render)
-# --------------------------------------------------------------------------
-
-# Extensions considérées comme des fichiers, et non comme des routes de l'IHM.
-# Distinction essentielle : si le navigateur réclame « /chunk-ABC.js » et que ce
-# fichier n'existe pas, il faut répondre 404. Lui renvoyer index.html à la place
-# masquerait la panne : le navigateur recevrait du HTML là où il attend du code,
-# refuserait de l'exécuter, et l'IHM resterait muette sans erreur visible.
-EXTENSIONS_FICHIERS = {
-    ".js", ".mjs", ".css", ".map", ".ico", ".png", ".jpg", ".jpeg", ".gif",
-    ".svg", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".json", ".txt", ".webmanifest",
-}
-
-
-@app.get("/api/diagnostic-front", tags=["Système"])
-def diagnostic_front():
-    """Vérifie que le front compilé est complet et cohérent.
-
-    À ouvrir dans un navigateur en cas de page blanche : indique si le dossier
-    statique existe, combien de fichiers il contient, et si chaque ressource
-    référencée par index.html est réellement présente sur le disque.
+    Retourne la liste des modifications appliquées, pour journalisation.
     """
-    if not DOSSIER_STATIQUE.exists():
-        return {
-            "front_present": False,
-            "dossier_attendu": str(DOSSIER_STATIQUE),
-            "diagnostic": (
-                "Le front compilé est absent de l'image. Vérifiez que l'étape de "
-                "construction Angular du Dockerfile s'est bien déroulée."
-            ),
-        }
+    inspecteur = inspect(engine)
+    modifications: list[str] = []
 
-    fichiers = sorted(p.name for p in DOSSIER_STATIQUE.iterdir() if p.is_file())
-    index = DOSSIER_STATIQUE / "index.html"
-    references: list[dict] = []
-    if index.exists():
-        contenu = index.read_text(encoding="utf-8")
-        for motif in re.findall(r'(?:src|href)="([^"]+\.(?:js|css))"', contenu):
-            chemin = motif.lstrip("/")
-            references.append({"fichier": chemin, "present": (DOSSIER_STATIQUE / chemin).is_file()})
+    for table in metadata.sorted_tables:
+        if not inspecteur.has_table(table.name):
+            continue  # create_all vient de la créer avec toutes ses colonnes
+        existantes = {c["name"] for c in inspecteur.get_columns(table.name)}
 
-    manquants = [r["fichier"] for r in references if not r["present"]]
-    morceaux = [f for f in fichiers if f.startswith("chunk-")]
-    return {
-        "front_present": True,
-        "index_present": index.exists(),
-        "nb_fichiers": len(fichiers),
-        "nb_morceaux_pages": len(morceaux),
-        "ressources_index": references,
-        "ressources_manquantes": manquants,
-        "fichiers": fichiers,
-        "diagnostic": (
-            "Front complet et cohérent."
-            if index.exists() and not manquants and morceaux
-            else "Front incomplet : voir « ressources_manquantes » et « nb_morceaux_pages »."
-        ),
-    }
+        for colonne in table.columns:
+            if colonne.name in existantes:
+                continue
 
+            type_sql = colonne.type.compile(dialect=engine.dialect)
+            morceaux = [f'ALTER TABLE "{table.name}" ADD COLUMN "{colonne.name}" {type_sql}']
+            defaut = _valeur_par_defaut(colonne)
+            if defaut is not None:
+                morceaux.append(f"DEFAULT {defaut}")
+            if not colonne.nullable:
+                if defaut is None:
+                    # Sans valeur de repli, imposer NOT NULL casserait les lignes
+                    # existantes : on préfère une colonne permissive à un démarrage
+                    # impossible.
+                    logger.warning(
+                        "Colonne %s.%s ajoutée sans contrainte NOT NULL "
+                        "(aucune valeur par défaut exploitable).",
+                        table.name,
+                        colonne.name,
+                    )
+                else:
+                    morceaux.append("NOT NULL")
 
-if DOSSIER_STATIQUE.exists():
+            instruction = " ".join(morceaux)
+            try:
+                with engine.begin() as connexion:
+                    connexion.execute(text(instruction))
+                modifications.append(f"{table.name}.{colonne.name}")
+                logger.info("Schéma mis à jour : %s", instruction)
+            except Exception:  # noqa: BLE001
+                logger.exception("Échec de la mise à jour du schéma : %s", instruction)
 
-    @app.get("/{chemin:path}", include_in_schema=False)
-    def servir_front(chemin: str):
-        cible = DOSSIER_STATIQUE / chemin
-        if chemin and cible.is_file():
-            return FileResponse(cible)
-        if Path(chemin).suffix.lower() in EXTENSIONS_FICHIERS:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Ressource statique introuvable : {chemin}",
-            )
-        # Toute autre adresse est une route de l'interface : Angular en prend la main.
-        return FileResponse(DOSSIER_STATIQUE / "index.html")
+    if modifications:
+        logger.info(
+            "Synchronisation du schéma terminée : %s colonne(s) ajoutée(s) (%s).",
+            len(modifications),
+            ", ".join(modifications),
+        )
+    return modifications
