@@ -11,9 +11,10 @@ vulnérabilités avec relances automatiques, calendrier MCO et communication de 
 | Module | Ce que vous y faites |
 |---|---|
 | **Tableau de bord** | Voir en un écran l'état du parc, la dette de sécurité et la capacité d'intervention (le « ruban hebdomadaire »). |
-| **Parc applicatif** | Créer/modifier les applications. Chaque fiche contient : responsable, notes, périmètre DORA, exposition Internet, plages de maintenance, cartographie des flux, habilitations de production, SBOM, sanity check, documentation (avec liens), dispositifs de sécurité, vulnérabilités, obsolescences et DoJo. |
+| **Parc applicatif** | Créer/modifier les applications. Chaque fiche contient : responsable, notes, classification DICP, DIMA/PDMA, SIIS, périmètre DORA, exposition Internet, technologies utilisées, plages de maintenance, cartographie des flux, habilitations de production, SBOM, sanity check, documentation (avec liens), dispositifs de sécurité, vulnérabilités, obsolescences et DoJo. |
 | **Créneaux de maintenance** | Sélectionner plusieurs applications (ou tout le parc) et trouver la fenêtre commune. S'il n'existe aucun créneau parfait, l'outil propose le **moindre mal** en nommant les applications en conflit. |
 | **Vulnérabilités** | Déclarer une faille (composant, version touchée, version cible), l'associer à plusieurs applications, suivre l'avancement application par application, déclencher les relances. |
+| **Gestion des flux** | Catalogue de tous les échanges du parc, avec récurrences détaillées (tous les lundis, tous les 14 du mois, le 1er mardi du mois…). Filtres par partenaire, application, créneau horaire, jour. Vue « analyse d'impact » qui déplie les occurrences datées. |
 | **Obsolescences** | Suivre les composants en fin de support : version obsolète, version cible, date limite imposée par l'éditeur et date de traitement planifiée. Planning visuel du parc, groupable par composant ou par application. |
 | **Calendrier MCO** | Voir les plages projetées et inscrire les événements transverses (maintenance SSO, coupure réseau, fenêtre de tir infra, gel de production). |
 | **Éditeurs & partenaires** | Annuaire centralisé des contacts et des chaînes d'escalade. |

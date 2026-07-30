@@ -29,6 +29,7 @@ from .models import (
     ModeSuivi,
     Partenaire,
     PlageMaintenance,
+    TypeRecurrence,
     SensFlux,
     StatutApplication,
     StatutVulnerabilite,
@@ -167,6 +168,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_FIN_OPS + compte applicatif svc-fincore + accès bastion Wallix.",
         dora=True,
         expose_internet=False,
+        siis=True,
+        disponibilite=4, integrite=4, confidentialite=3, preuve=4,
+        dima=3, pdma=4,
+        technologies="Java 17, Spring Boot, Oracle 19c, Tomcat, Angular",
         editeur_id=partenaires["sapiens"].id,
     )
     rh = app_factory(
@@ -186,6 +191,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_RH_OPS, validation RSSI requise pour tout accès aux données.",
         dora=False,
         expose_internet=False,
+        siis=True,
+        disponibilite=3, integrite=4, confidentialite=4, preuve=4,
+        dima=2, pdma=4,
+        technologies="Progiciel éditeur, Oracle 19c, Windows Server",
         editeur_id=partenaires["sapiens"].id,
     )
     crm = app_factory(
@@ -203,6 +212,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_CRM_SUPPORT.",
         dora=False,
         expose_internet=True,
+        siis=False,
+        disponibilite=3, integrite=3, confidentialite=3, preuve=2,
+        dima=2, pdma=2,
+        technologies="Java 8, Tomcat 8.5, PostgreSQL, React",
         editeur_id=partenaires["novaflux"].id,
     )
     portail = app_factory(
@@ -221,6 +234,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_DIGITAL + double validation pour les modifications WAF.",
         dora=True,
         expose_internet=True,
+        siis=True,
+        disponibilite=4, integrite=4, confidentialite=4, preuve=3,
+        dima=4, pdma=3,
+        technologies="Angular 14, Node.js 16, Nginx, PostgreSQL, Kubernetes",
         editeur_id=partenaires["novaflux"].id,
     )
     edi = app_factory(
@@ -238,6 +255,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_EDI_OPS + certificat client pour les rejeux.",
         dora=True,
         expose_internet=True,
+        siis=True,
+        disponibilite=4, integrite=4, confidentialite=3, preuve=4,
+        dima=4, pdma=4,
+        technologies="Java 8, Apache Camel, SFTP, Oracle 19c",
         editeur_id=partenaires["cloudops"].id,
     )
     bi = app_factory(
@@ -255,6 +276,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_DATA_OPS.",
         dora=False,
         expose_internet=False,
+        siis=False,
+        disponibilite=2, integrite=3, confidentialite=2, preuve=2,
+        dima=1, pdma=2,
+        technologies="Python 3.8, PostgreSQL 11, Airflow, Power BI",
     )
     ged = app_factory(
         code="GED-DOC",
@@ -270,6 +295,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_GED.",
         dora=False,
         expose_internet=False,
+        siis=False,
+        disponibilite=1, integrite=2, confidentialite=3, preuve=3,
+        dima=1, pdma=1,
+        technologies="Tomcat 8.5, MySQL, stockage objet S3",
     )
     sso = app_factory(
         code="SEC-SSO",
@@ -286,6 +315,10 @@ def injecter_jeu_de_donnees(db: Session) -> None:
         habilitations="Groupe AD PROD_IAM_ADMIN + validation RSSI systématique.",
         dora=True,
         expose_internet=True,
+        siis=True,
+        disponibilite=4, integrite=4, confidentialite=4, preuve=4,
+        dima=4, pdma=3,
+        technologies="Keycloak, Nginx, Windows Server, OpenSSL",
         editeur_id=partenaires["cloudops"].id,
     )
     db.flush()
@@ -324,19 +357,42 @@ def injecter_jeu_de_donnees(db: Session) -> None:
     flux = [
         (edi, "Virements SEPA sortants", SensFlux.SORTANT, FrequenceFlux.QUOTIDIEN, "18:30",
          "Jours ouvrés", "SFTP", partenaires["banque"], True,
-         "Rejet bloquant si non transmis avant 19h."),
+         "Rejet bloquant si non transmis avant 19h.",
+         TypeRecurrence.HEBDOMADAIRE, "0;1;2;3;4", None, None, None),
         (edi, "Relevés bancaires entrants", SensFlux.ENTRANT, FrequenceFlux.QUOTIDIEN, "06:15",
-         "Jours ouvrés", "SFTP", partenaires["banque"], True, None),
+         "Jours ouvrés", "SFTP", partenaires["banque"], True, None,
+         TypeRecurrence.HEBDOMADAIRE, "0;1;2;3;4", None, None, None),
         (finance, "Écritures comptables du CRM", SensFlux.ENTRANT, FrequenceFlux.QUOTIDIEN,
-         "22:00", "Tous les jours", "API REST", None, False, None),
+         "22:00", "Tous les jours", "API REST", None, False, None,
+         TypeRecurrence.QUOTIDIEN, None, None, None, None),
         (bi, "Alimentation datawarehouse", SensFlux.ENTRANT, FrequenceFlux.QUOTIDIEN, "23:00",
-         "Tous les jours", "ETL", None, False, "Durée moyenne 4h."),
+         "Tous les jours", "ETL", None, False, "Durée moyenne 4h.",
+         TypeRecurrence.QUOTIDIEN, None, None, None, None),
         (portail, "Publication catalogue", SensFlux.SORTANT, FrequenceFlux.HORAIRE, None,
-         "Tous les jours", "API REST", None, False, None),
+         "Tous les jours", "API REST", None, False, None,
+         TypeRecurrence.HORAIRE, None, None, None, None),
         (rh, "Déclaration sociale nominative", SensFlux.SORTANT, FrequenceFlux.MENSUEL, "10:00",
-         "Le 5 du mois", "SFTP", partenaires["banque"], True, "Échéance légale stricte."),
+         "Le 5 du mois", "SFTP", partenaires["banque"], True, "Échéance légale stricte.",
+         TypeRecurrence.MENSUEL_DATE, None, 5, None, None),
+        (finance, "Clôture comptable mensuelle", SensFlux.SORTANT, FrequenceFlux.MENSUEL, "20:00",
+         "Dernier jour ouvré", "SFTP", None, True, "Transmission au consolidateur groupe.",
+         TypeRecurrence.MENSUEL_JOUR, None, None, 5, 4),
+        (crm, "Extraction portefeuille commercial", SensFlux.SORTANT, FrequenceFlux.HEBDOMADAIRE,
+         "07:00", "Tous les lundis", "API REST", None, False, None,
+         TypeRecurrence.HEBDOMADAIRE, "0", None, None, None),
+        (sso, "Synchronisation annuaire", SensFlux.ENTRANT, FrequenceFlux.TEMPS_REEL, None,
+         "En continu", "LDAP", None, True, "Réplication permanente depuis l'annuaire.",
+         TypeRecurrence.TEMPS_REEL, None, None, None, None),
+        (ged, "Archivage légal annuel", SensFlux.SORTANT, FrequenceFlux.MENSUEL, "23:00",
+         "31 décembre", "SFTP", partenaires["cloudops"], False, "Versement aux archives.",
+         TypeRecurrence.ANNUEL, None, 31, None, None),
+        (portail, "Comité de rapprochement partenaire", SensFlux.SORTANT,
+         FrequenceFlux.MENSUEL, "09:00", "1er mardi du mois", "API REST",
+         partenaires["banque"], False, "Réconciliation des écarts du mois.",
+         TypeRecurrence.MENSUEL_JOUR, None, None, 1, 1),
     ]
-    for application, nom, sens, freq, heure, jour, proto, partenaire, bloquant, desc in flux:
+    for (application, nom, sens, freq, heure, jour, proto, partenaire, bloquant, desc,
+         recurrence, jours_sem, jour_mois, occurrence, jour_sem_mois) in flux:
         db.add(
             Flux(
                 application_id=application.id,
@@ -349,6 +405,12 @@ def injecter_jeu_de_donnees(db: Session) -> None:
                 partenaire_id=partenaire.id if partenaire else None,
                 bloquant=bloquant,
                 description=desc,
+                recurrence=recurrence,
+                jours_semaine=jours_sem,
+                jour_du_mois=jour_mois,
+                occurrence_mois=occurrence,
+                jour_semaine_mois=jour_sem_mois,
+                mois_annee=12 if recurrence == TypeRecurrence.ANNUEL else None,
             )
         )
 

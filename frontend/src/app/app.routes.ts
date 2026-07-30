@@ -31,6 +31,11 @@ export const routes: Routes = [
       import('./pages/vulnerabilites.component').then((m) => m.VulnerabilitesComponent),
   },
   {
+    path: 'flux',
+    title: 'Gestion des flux — MCO',
+    loadComponent: () => import('./pages/flux.component').then((m) => m.FluxComponent),
+  },
+  {
     path: 'obsolescences',
     title: 'Obsolescences — MCO',
     loadComponent: () =>

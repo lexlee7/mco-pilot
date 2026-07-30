@@ -6,6 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..services.recurrence import libelle_recurrence
 from ..models import (
     Application,
     Criticite,
@@ -32,7 +33,7 @@ from ..schemas import (
     PlageCreate,
     PlageRead,
 )
-from ..serializers import application_detail, application_read
+from ..serializers import application_detail, application_read, flux_read
 
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
@@ -154,7 +155,7 @@ def ajouter_flux(app_id: int, payload: FluxCreate, db: Session = Depends(get_db)
     db.add(flux)
     db.commit()
     db.refresh(flux)
-    return flux
+    return flux_read(flux)
 
 
 @router.put("/{app_id}/flux/{flux_id}", response_model=FluxRead)
@@ -166,7 +167,7 @@ def modifier_flux(app_id: int, flux_id: int, payload: FluxCreate, db: Session = 
         setattr(flux, cle, valeur)
     db.commit()
     db.refresh(flux)
-    return flux
+    return flux_read(flux)
 
 
 @router.delete("/{app_id}/flux/{flux_id}", status_code=204)
@@ -293,6 +294,7 @@ def cartographie_flux(app_id: int, db: Session = Depends(get_db)):
             "nom": flux.nom,
             "sens": flux.sens.value,
             "frequence": flux.frequence.value,
+            "recurrence": libelle_recurrence(flux),
             "heure": flux.heure,
             "jour": flux.jour,
             "protocole": flux.protocole,

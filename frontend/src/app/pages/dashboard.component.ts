@@ -130,6 +130,37 @@ import { IconeComponent } from '../shared/icone.component';
             </div>
           }
 
+          <h2 style="font-size: 18px; margin: 26px 0 18px">Périmètre réglementaire DORA</h2>
+          @for (item of s.repartition_dora; track item.cle) {
+            <div class="barre">
+              <div class="barre__tete">
+                <span [class]="item.cle === 'Périmètre DORA' ? 'pastille p-info' : 'pastille p-neutre'">
+                  {{ item.cle }}
+                </span>
+                <span class="mono doux">{{ item.valeur }}</span>
+              </div>
+              <div class="barre__rail">
+                <div class="barre__jauge" [style.width.%]="pourcent(item, s.repartition_dora)"></div>
+              </div>
+            </div>
+          }
+
+          <h2 style="font-size: 18px; margin: 26px 0 18px">Exposition Internet</h2>
+          @for (item of s.repartition_exposition; track item.cle) {
+            <div class="barre">
+              <div class="barre__tete">
+                <span [class]="item.cle === 'Exposée Internet' ? 'pastille p-alerte' : 'pastille p-neutre'">
+                  {{ item.cle }}
+                </span>
+                <span class="mono doux">{{ item.valeur }}</span>
+              </div>
+              <div class="barre__rail">
+                <div class="barre__jauge barre__jauge--securite"
+                     [style.width.%]="pourcent(item, s.repartition_exposition)"></div>
+              </div>
+            </div>
+          }
+
           <h2 style="font-size: 18px; margin: 26px 0 18px">Criticité métier</h2>
           @for (item of s.repartition_criticites; track item.cle) {
             <div class="barre">

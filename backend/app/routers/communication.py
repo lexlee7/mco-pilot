@@ -14,6 +14,7 @@ from ..models import (
     TemplateCommunication,
 )
 from ..schemas import (
+    CommunicationDetail,
     CommunicationRead,
     EnvoiCommunicationRequest,
     EnvoiCommunicationResponse,
@@ -25,6 +26,36 @@ from ..schemas import (
 from ..services.mailer import envoyer_email, mode_simulation
 
 router = APIRouter(prefix="/api/communication", tags=["Communication de crise"])
+
+
+def _substituer(corps: str, sujet: str, applications: list[Application]) -> tuple[str, str]:
+    """Remplace les variables dans le corps ET dans l'objet.
+
+    L'objet était auparavant expédié tel quel : les destinataires recevaient un
+    message dont le titre affichait encore la variable brute.
+
+    Avec plusieurs applications, les noms sont énumérés ; les variables au
+    singulier reprennent alors la liste complète, afin qu'aucun destinataire ne
+    croie qu'un seul périmètre est concerné.
+    """
+    noms = ", ".join(a.nom for a in applications)
+    codes = ", ".join(a.code for a in applications)
+    responsables = ", ".join(
+        sorted({a.responsable_nom for a in applications if a.responsable_nom})
+    )
+    maintenant = datetime.now()
+    valeurs = {
+        "{{application}}": noms or "[application]",
+        "{{applications}}": noms or "[applications]",
+        "{{code_application}}": codes or "[code]",
+        "{{responsable}}": responsables,
+        "{{date}}": maintenant.strftime("%d/%m/%Y"),
+        "{{heure}}": maintenant.strftime("%H:%M"),
+    }
+    for cle, valeur in valeurs.items():
+        corps = corps.replace(cle, valeur)
+        sujet = sujet.replace(cle, valeur)
+    return corps, sujet
 
 
 def _liste_read(liste: ListeDiffusion) -> ListeDiffusionRead:
@@ -136,34 +167,32 @@ def envoyer(payload: EnvoiCommunicationRequest, db: Session = Depends(get_db)):
     if not destinataires:
         raise HTTPException(status_code=400, detail="Aucun destinataire sélectionné.")
 
-    corps = payload.corps_html
-    if payload.application_id:
-        app = db.get(Application, payload.application_id)
-        if app:
-            corps = (
-                corps.replace("{{application}}", app.nom)
-                .replace("{{code_application}}", app.code)
-                .replace("{{responsable}}", app.responsable_nom or "")
-            )
-    corps = corps.replace("{{date}}", datetime.now().strftime("%d/%m/%Y")).replace(
-        "{{heure}}", datetime.now().strftime("%H:%M")
+    applications = (
+        db.query(Application).filter(Application.id.in_(payload.application_ids)).all()
+        if payload.application_ids
+        else []
     )
+    corps, sujet = _substituer(payload.corps_html, payload.sujet, applications)
 
     if payload.test_uniquement:
         return EnvoiCommunicationResponse(
             statut="APERCU",
             nb_destinataires=len(destinataires),
             destinataires=destinataires,
-            detail="Aperçu : aucun message n'a été expédié.",
+            detail=(
+                "Aperçu : aucun message n'a été expédié. "
+                f"Objet tel qu'il partira : « {sujet} »"
+            ),
         )
 
-    statut, detail = envoyer_email(destinataires, payload.sujet, corps)
+    statut, detail = envoyer_email(destinataires, sujet, corps)
     db.add(
         Communication(
-            sujet=payload.sujet,
+            sujet=sujet,
             corps_html=corps,
             destinataires="; ".join(destinataires),
-            application_id=payload.application_id,
+            application_id=applications[0].id if applications else None,
+            applications_codes=", ".join(a.code for a in applications) or None,
             statut_envoi=statut,
             detail_envoi=detail,
         )
@@ -175,6 +204,15 @@ def envoyer(payload: EnvoiCommunicationRequest, db: Session = Depends(get_db)):
         destinataires=destinataires,
         detail=detail,
     )
+
+
+@router.get("/historique/{communication_id}", response_model=CommunicationDetail)
+def consulter(communication_id: int, db: Session = Depends(get_db)):
+    """Message archivé tel qu'il a été expédié, corps HTML compris."""
+    message = db.get(Communication, communication_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message introuvable.")
+    return message
 
 
 @router.get("/historique", response_model=list[CommunicationRead])

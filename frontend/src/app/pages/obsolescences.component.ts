@@ -26,6 +26,8 @@ interface Barre {
   positionPrevue: number | null; // % où se situe le traitement planifié
   ton: 'retard' | 'urgent' | 'proche' | 'confort';
   infobulle: string;
+  /** Ce qui distingue cette obsolescence des autres du même groupe. */
+  sousLibelle: string;
 }
 
 interface LignePlanning {
@@ -159,8 +161,9 @@ const JOUR_MS = 86_400_000;
           </div>
 
           @for (ligne of lignes(); track ligne.cle) {
-            <div class="frise__ligne">
-              <div class="frise__intitule">
+            <!-- En-tête de regroupement : le composant, ou l'application -->
+            <div class="groupe">
+              <div class="groupe__intitule">
                 @if (ligne.applicationId) {
                   <a class="mono libelle" [routerLink]="['/applications', ligne.applicationId]">
                     {{ ligne.libelle }}
@@ -170,16 +173,26 @@ const JOUR_MS = 86_400_000;
                 }
                 <span class="doux sous">{{ ligne.sousTitre }}</span>
               </div>
-              <div class="frise__piste">
-                @for (m of mois(); track m.cle) {
-                  <span class="frise__grille" [style.left.%]="m.position"></span>
-                }
-                <span class="frise__aujourdhui-trait" [style.left.%]="positionAujourdhui()"></span>
+              <div class="groupe__trait"></div>
+            </div>
 
-                @for (barre of ligne.barres; track barre.obso.id) {
+            <!-- Une ligne dédiée par obsolescence : plus aucun chevauchement -->
+            @for (barre of ligne.barres; track barre.obso.id) {
+              <div class="frise__ligne">
+                <div class="frise__intitule frise__intitule--enfant">
+                  <span class="sous-libelle">{{ barre.sousLibelle }}</span>
+                  <span class="doux sous mono">
+                    {{ barre.obso.version_obsolete }} → {{ barre.obso.version_cible || '?' }}
+                  </span>
+                </div>
+                <div class="frise__piste">
+                  @for (m of mois(); track m.cle) {
+                    <span class="frise__grille" [style.left.%]="m.position"></span>
+                  }
+                  <span class="frise__aujourdhui-trait" [style.left.%]="positionAujourdhui()"></span>
+
                   <button
                     type="button"
-                    class="barre"
                     [class]="'barre barre--' + barre.ton"
                     [style.left.%]="barre.gauche"
                     [style.width.%]="barre.largeur"
@@ -187,7 +200,7 @@ const JOUR_MS = 86_400_000;
                     (click)="ouvrirEdition(barre.obso)"
                   >
                     <span class="barre__texte mono">
-                      {{ barre.obso.version_obsolete }} → {{ barre.obso.version_cible || '?' }}
+                      {{ barre.obso.date_limite | date: 'MM/yy' }}
                     </span>
                   </button>
                   @if (barre.positionPrevue !== null) {
@@ -200,9 +213,9 @@ const JOUR_MS = 86_400_000;
                       "
                     ></span>
                   }
-                }
+                </div>
               </div>
-            </div>
+            }
           } @empty {
             <div class="vide" style="margin-top: 14px">
               Aucune obsolescence ne correspond à ce filtre.
@@ -408,7 +421,27 @@ const JOUR_MS = 86_400_000;
       }
       .frise__entete { height: 40px; margin-bottom: 6px; }
       .frise__ligne {
-        min-height: 46px; border-top: 1px solid var(--bordure);
+        min-height: 34px; border-top: 1px solid var(--bordure);
+      }
+      .frise__piste { min-height: 34px; }
+
+      .groupe {
+        display: grid; grid-template-columns: 210px 1fr;
+        align-items: center; gap: 0; min-width: 760px;
+        margin-top: 14px; padding-bottom: 3px;
+      }
+      .groupe__intitule { padding-right: 14px; overflow: hidden; }
+      .groupe__intitule .libelle {
+        display: block; font-size: 13.5px; font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .groupe__intitule .sous { font-size: 11px; }
+      .groupe__trait { height: 1px; background: var(--bordure-forte); }
+
+      .frise__intitule--enfant { padding-left: 14px; border-left: 2px solid var(--bordure); }
+      .sous-libelle {
+        display: block; font-size: 12px; color: var(--texte);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .frise__intitule { padding-right: 14px; overflow: hidden; }
       .frise__intitule .libelle {
@@ -438,7 +471,7 @@ const JOUR_MS = 86_400_000;
 
       .barre {
         position: absolute; top: 50%; transform: translateY(-50%);
-        height: 22px; min-width: 10px;
+        height: 18px; min-width: 10px;
         border: none; border-radius: 5px; cursor: pointer;
         display: flex; align-items: center; padding: 0 7px; overflow: hidden;
         color: #fff; transition: filter var(--transition), transform var(--transition);
@@ -547,7 +580,16 @@ export class ObsolescencesComponent {
       sousTitre,
       applicationId,
       nbEnRetard,
-      barres: items.map((o) => this.construireBarre(o)).filter((b): b is Barre => b !== null),
+      // Regroupé par composant, on distingue par application ; regroupé par
+      // application, on distingue par composant. Chacune occupe sa propre ligne.
+      barres: items
+        .map((o) =>
+          this.construireBarre(
+            o,
+            this.regroupement() === 'composant' ? (o.code_application ?? '') : o.composant,
+          ),
+        )
+        .filter((b): b is Barre => b !== null),
     });
 
     let lignes: LignePlanning[];
@@ -618,7 +660,7 @@ export class ObsolescencesComponent {
    * qu'il reste pour agir. Si le support est déjà terminé, elle court à l'inverse
    * de l'échéance jusqu'à aujourd'hui, en rouge : c'est le retard accumulé.
    */
-  private construireBarre(o: Obsolescence): Barre | null {
+  private construireBarre(o: Obsolescence, sousLibelle: string): Barre | null {
     if (!o.date_limite) return null;
     const limite = new Date(o.date_limite);
     const maintenant = new Date();
@@ -650,6 +692,7 @@ export class ObsolescencesComponent {
       positionPrevue: prevue ? this.position(prevue) : null,
       ton,
       infobulle,
+      sousLibelle,
     };
   }
 

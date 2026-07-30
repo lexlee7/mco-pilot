@@ -7,6 +7,7 @@ import { ApiService } from '../core/api.service';
 import { NotificationService } from '../core/ui.service';
 import {
   Application,
+  CommunicationDetail,
   HistoriqueComm,
   ListeDiffusion,
   Referentiels,
@@ -106,15 +107,31 @@ type Vue = 'assistant' | 'modeles' | 'listes' | 'historique';
                   placeholder="prenom.nom@exemple.fr ; autre@exemple.fr"
                 />
               </div>
-              <div class="champ">
-                <label for="app">Application concernée</label>
-                <select id="app" class="saisie" [ngModel]="applicationId()" (ngModelChange)="applicationId.set($event)">
-                  <option value="">Aucune / transverse</option>
-                  @for (a of applications(); track a.id) {
-                    <option [value]="a.id">{{ a.code }} — {{ a.nom }}</option>
-                  }
-                </select>
+            </div>
+
+            <div class="champ" style="margin-top: 16px">
+              <label>
+                Applications concernées
+                <span class="doux">— leurs noms remplacent les variables du message</span>
+              </label>
+              <div class="grille-apps">
+                @for (a of applications(); track a.id) {
+                  <label class="app-choix" [class.app-choix--active]="appsChoisies().includes(a.id)">
+                    <input
+                      type="checkbox"
+                      [checked]="appsChoisies().includes(a.id)"
+                      (change)="basculerApp(a.id)"
+                    />
+                    <span class="mono">{{ a.code }}</span>
+                  </label>
+                }
               </div>
+              @if (appsChoisies().length > 1) {
+                <p class="doux" style="font-size: 12px; margin: 8px 0 0">
+                  {{ appsChoisies().length }} applications sélectionnées : les variables
+                  reprendront la liste complète, objet du message compris.
+                </p>
+              }
             </div>
           </section>
 
@@ -146,7 +163,12 @@ type Vue = 'assistant' | 'modeles' | 'listes' | 'historique';
 
         <aside class="carte apercu">
           <div class="eyebrow">Aperçu</div>
-          <h2 class="titre-bloc">{{ sujet() || 'Objet du message' }}</h2>
+          <h2 class="titre-bloc">{{ sujetRendu() || 'Objet du message' }}</h2>
+          @if (sujet() !== sujetRendu()) {
+            <p class="doux" style="font-size: 11.5px; margin: 4px 0 0">
+              Objet tel qu'il sera reçu, variables remplacées.
+            </p>
+          }
           <div class="apercu__cadre" [innerHTML]="apercu()"></div>
         </aside>
       </div>
@@ -240,22 +262,62 @@ type Vue = 'assistant' | 'modeles' | 'listes' | 'historique';
         <h2 class="titre-bloc">Messages envoyés</h2>
         <div class="tableau-conteneur" style="margin-top: 14px">
           <table class="tableau">
-            <thead><tr><th>Date</th><th>Objet</th><th>Destinataires</th><th>Statut</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Date</th><th>Objet</th><th>Applications</th>
+                <th>Destinataires</th><th>Statut</th><th></th>
+              </tr>
+            </thead>
             <tbody>
               @for (h of historique(); track h.id) {
-                <tr>
+                <tr class="ligne-historique" (click)="consulter(h)">
                   <td class="mono">{{ h.envoye_le | date: 'dd/MM/yyyy HH:mm' }}</td>
                   <td>{{ h.sujet }}</td>
+                  <td class="mono doux">{{ h.applications_codes || '—' }}</td>
                   <td class="doux mono" style="font-size: 11.5px">{{ h.destinataires }}</td>
                   <td><span [class]="classe(h.statut_envoi)">{{ format(h.statut_envoi) }}</span></td>
+                  <td>
+                    <button class="btn btn--fantome btn--petit" type="button"
+                            (click)="$event.stopPropagation(); consulter(h)">
+                      <mco-icone nom="oeil" [taille]="15" /> Consulter
+                    </button>
+                  </td>
                 </tr>
               } @empty {
-                <tr><td colspan="4"><div class="vide" style="border: none">Aucun envoi enregistré.</div></td></tr>
+                <tr><td colspan="6"><div class="vide" style="border: none">Aucun envoi enregistré.</div></td></tr>
               }
             </tbody>
           </table>
         </div>
       </div>
+    }
+
+    @if (messageConsulte(); as m) {
+      <mco-modale
+        titre="Message envoyé"
+        surtitre="Archive"
+        (fermer)="messageConsulte.set(undefined)"
+      >
+        <dl class="liste-def">
+          <dt>Objet</dt>
+          <dd>{{ m.sujet }}</dd>
+          <dt>Envoyé le</dt>
+          <dd class="mono">{{ m.envoye_le | date: 'dd/MM/yyyy à HH:mm' }}</dd>
+          <dt>Applications concernées</dt>
+          <dd class="mono">{{ m.applications_codes || 'Transverse' }}</dd>
+          <dt>Destinataires</dt>
+          <dd class="mono" style="font-size: 12px; word-break: break-all">{{ m.destinataires }}</dd>
+          <dt>Statut</dt>
+          <dd>
+            <span [class]="classe(m.statut_envoi)">{{ format(m.statut_envoi) }}</span>
+            @if (m.detail_envoi) {
+              <div class="doux" style="font-size: 12px; margin-top: 5px">{{ m.detail_envoi }}</div>
+            }
+          </dd>
+        </dl>
+        <div class="eyebrow" style="margin-top: 20px">Contenu expédié</div>
+        <div class="apercu__cadre" [innerHTML]="corpsArchive()"></div>
+      </mco-modale>
     }
 
     @if (modaleTemplate()) {
@@ -386,6 +448,26 @@ type Vue = 'assistant' | 'modeles' | 'listes' | 'historique';
       .liste-choix--active { border-color: var(--signal); background: var(--signal-sourd); }
       .liste-choix input { accent-color: var(--signal); width: 16px; height: 16px; }
 
+      .grille-apps { display: flex; flex-wrap: wrap; gap: 7px; }
+      .app-choix {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 7px 11px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+        border: 1px solid var(--bordure);
+        transition: border-color var(--transition), background var(--transition);
+      }
+      .app-choix:hover { border-color: var(--bordure-forte); }
+      .app-choix--active { border-color: var(--signal); background: var(--signal-sourd); }
+      .app-choix input { accent-color: var(--signal); }
+
+      .ligne-historique { cursor: pointer; }
+
+      .liste-def { display: grid; gap: 12px; margin: 0; }
+      .liste-def dt {
+        font-family: var(--mono); font-size: 10px; letter-spacing: 0.13em;
+        text-transform: uppercase; color: var(--texte-doux);
+      }
+      .liste-def dd { margin: 4px 0 0; font-size: 13.5px; }
+
       .apercu { position: sticky; top: 24px; }
       .apercu__cadre {
         margin-top: 14px; border-radius: var(--r-m); overflow: auto;
@@ -418,7 +500,8 @@ export class CommunicationComponent {
   readonly templateChoisi = signal<TemplateComm | undefined>(undefined);
   readonly listesChoisies = signal<number[]>([]);
   readonly supplementaires = signal('');
-  readonly applicationId = signal('');
+  readonly appsChoisies = signal<number[]>([]);
+  readonly messageConsulte = signal<CommunicationDetail | undefined>(undefined);
   readonly sujet = signal('');
   readonly corps = signal('');
 
@@ -427,17 +510,46 @@ export class CommunicationComponent {
   brouillonTemplate: Partial<TemplateComm> & { id?: number } = { nom: '', categorie: 'INCIDENT_OUVERTURE', sujet: '', corps_html: '' };
   brouillonListe: Partial<ListeDiffusion> & { id?: number } = { nom: '', description: '', destinataires: '' };
 
-  readonly apercu = computed<SafeHtml>(() => {
-    const app = this.applications().find((a) => String(a.id) === this.applicationId());
+  /** Applique les mêmes substitutions que le serveur, objet compris. */
+  private substituer(texte: string): string {
+    const choisies = this.applications().filter((a) => this.appsChoisies().includes(a.id));
+    const noms = choisies.map((a) => a.nom).join(', ');
+    const codes = choisies.map((a) => a.code).join(', ');
+    const responsables = [...new Set(choisies.map((a) => a.responsable_nom).filter(Boolean))].join(', ');
     const maintenant = new Date();
-    const rendu = this.corps()
-      .replace(/{{application}}/g, app?.nom ?? '[application]')
-      .replace(/{{code_application}}/g, app?.code ?? '[code]')
-      .replace(/{{responsable}}/g, app?.responsable_nom ?? '[responsable]')
+    return texte
+      .replace(/{{applications}}/g, noms || '[applications]')
+      .replace(/{{application}}/g, noms || '[application]')
+      .replace(/{{code_application}}/g, codes || '[code]')
+      .replace(/{{responsable}}/g, responsables || '[responsable]')
       .replace(/{{date}}/g, maintenant.toLocaleDateString('fr-FR'))
       .replace(/{{heure}}/g, maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-    return this.sanitizer.bypassSecurityTrustHtml(rendu || '<p style="padding:20px">Sélectionnez un modèle.</p>');
+  }
+
+  readonly sujetRendu = computed(() => this.substituer(this.sujet()));
+
+  readonly apercu = computed<SafeHtml>(() => {
+    const rendu = this.substituer(this.corps());
+    return this.sanitizer.bypassSecurityTrustHtml(
+      rendu || '<p style="padding:20px">Sélectionnez un modèle.</p>');
   });
+
+  readonly corpsArchive = computed<SafeHtml>(() =>
+    this.sanitizer.bypassSecurityTrustHtml(this.messageConsulte()?.corps_html ?? ''),
+  );
+
+  basculerApp(id: number): void {
+    this.appsChoisies.update((liste) =>
+      liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id],
+    );
+  }
+
+  consulter(h: HistoriqueComm): void {
+    this.api.consulterCommunication(h.id).subscribe({
+      next: (m) => this.messageConsulte.set(m),
+      error: () => this.notif.erreur('Message introuvable.'),
+    });
+  }
 
   constructor() {
     this.api.referentiels().subscribe((r) => this.referentiels.set(r));
@@ -483,7 +595,7 @@ export class CommunicationComponent {
         corps_html: this.corps(),
         liste_ids: this.listesChoisies(),
         destinataires_supplementaires: this.supplementaires(),
-        application_id: this.applicationId() ? Number(this.applicationId()) : null,
+        application_ids: this.appsChoisies(),
         test_uniquement: apercuSeulement,
       })
       .subscribe({

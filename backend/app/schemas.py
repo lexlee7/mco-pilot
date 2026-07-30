@@ -9,6 +9,7 @@ from .models import (
     CategorieTemplate,
     StatutObsolescence,
     TypeDojo,
+    TypeRecurrence,
     Criticite,
     EtatDocument,
     FrequenceFlux,
@@ -79,10 +80,21 @@ class FluxBase(BaseModel):
     partenaire_id: int | None = None
     bloquant: bool = False
     description: str | None = None
+    recurrence: TypeRecurrence = TypeRecurrence.QUOTIDIEN
+    jours_semaine: str | None = None
+    jour_du_mois: int | None = None
+    occurrence_mois: int | None = None
+    jour_semaine_mois: int | None = None
+    mois_annee: int | None = None
+    duree_minutes: int | None = None
 
 
 class FluxCreate(FluxBase):
     pass
+
+
+class FluxGlobalCreate(FluxCreate):
+    application_id: int
 
 
 class FluxRead(FluxBase):
@@ -90,6 +102,22 @@ class FluxRead(FluxBase):
     id: int
     application_id: int
     partenaire: PartenaireRead | None = None
+    libelle_recurrence: str = ""
+    code_application: str | None = None
+    nom_application: str | None = None
+
+
+class OccurrenceFlux(BaseModel):
+    flux_id: int
+    nom: str
+    application_id: int
+    sens: SensFlux
+    bloquant: bool
+    partenaire: str | None = None
+    date: date
+    horodatage: datetime
+    heure: str | None = None
+    note: str | None = None
 
 
 # --------------------------------------------------------------------- Documents
@@ -153,6 +181,14 @@ class ApplicationBase(BaseModel):
     editeur_id: int | None = None
     dora: bool = False
     expose_internet: bool = False
+    siis: bool = False
+    disponibilite: int | None = Field(default=None, ge=1, le=4)
+    integrite: int | None = Field(default=None, ge=1, le=4)
+    confidentialite: int | None = Field(default=None, ge=1, le=4)
+    preuve: int | None = Field(default=None, ge=1, le=4)
+    dima: int | None = Field(default=None, ge=1, le=4)
+    pdma: int | None = Field(default=None, ge=1, le=4)
+    technologies: str | None = None
 
 
 class ApplicationCreate(ApplicationBase):
@@ -179,6 +215,14 @@ class ApplicationUpdate(BaseModel):
     editeur_id: int | None = None
     dora: bool | None = None
     expose_internet: bool | None = None
+    siis: bool | None = None
+    disponibilite: int | None = Field(default=None, ge=1, le=4)
+    integrite: int | None = Field(default=None, ge=1, le=4)
+    confidentialite: int | None = Field(default=None, ge=1, le=4)
+    preuve: int | None = Field(default=None, ge=1, le=4)
+    dima: int | None = Field(default=None, ge=1, le=4)
+    pdma: int | None = Field(default=None, ge=1, le=4)
+    technologies: str | None = None
 
 
 class ApplicationRead(ApplicationBase):
@@ -481,7 +525,7 @@ class EnvoiCommunicationRequest(BaseModel):
     corps_html: str
     liste_ids: list[int] = []
     destinataires_supplementaires: str = ""
-    application_id: int | None = None
+    application_ids: list[int] = []
     test_uniquement: bool = False
 
 
@@ -500,6 +544,14 @@ class CommunicationRead(BaseModel):
     envoye_le: datetime
     statut_envoi: str
     application_id: int | None = None
+    applications_codes: str | None = None
+
+
+class CommunicationDetail(CommunicationRead):
+    """Message archivé, tel qu'il a été expédié."""
+
+    corps_html: str
+    detail_envoi: str | None = None
 
 
 # --------------------------------------------------------------------- Dashboard
@@ -524,6 +576,8 @@ class DashboardStats(BaseModel):
     repartition_statuts: list[RepartitionItem]
     repartition_criticites: list[RepartitionItem]
     repartition_gravites: list[RepartitionItem]
+    repartition_dora: list[RepartitionItem] = []
+    repartition_exposition: list[RepartitionItem] = []
     couverture_plages: list[RepartitionItem]
     applications_a_risque: list[ApplicationMini]
 

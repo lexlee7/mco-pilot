@@ -3,11 +3,19 @@ from __future__ import annotations
 
 from datetime import date
 
-from .models import Application, Obsolescence, StatutObsolescence, StatutVulnerabilite, Vulnerabilite
+from .models import (
+    Application,
+    Flux,
+    Obsolescence,
+    StatutObsolescence,
+    StatutVulnerabilite,
+    Vulnerabilite,
+)
 from .schemas import (
     ApplicationDetail,
     ApplicationImpactee,
     ApplicationRead,
+    FluxRead,
     ObsolescenceRead,
     VulnerabiliteLiee,
     VulnerabiliteRead,
@@ -20,6 +28,18 @@ OBSO_ACTIVES = (
     StatutObsolescence.PLANIFIEE,
     StatutObsolescence.EN_COURS,
 )
+
+
+def flux_read(flux: Flux) -> FluxRead:
+    """Ajoute le libellé de récurrence et le rattachement applicatif."""
+    from .services.recurrence import libelle_recurrence
+
+    data = FluxRead.model_validate(flux)
+    data.libelle_recurrence = libelle_recurrence(flux)
+    if flux.application is not None:
+        data.code_application = flux.application.code
+        data.nom_application = flux.application.nom
+    return data
 
 
 def obsolescence_read(obso: Obsolescence) -> ObsolescenceRead:
@@ -54,6 +74,7 @@ def application_read(app: Application) -> ApplicationRead:
 def application_detail(app: Application) -> ApplicationDetail:
     data = ApplicationDetail.model_validate(app)
     data.nb_vulnerabilites_ouvertes = compter_vulns_ouvertes(app)
+    data.flux = [flux_read(f) for f in app.flux]
     data.obsolescences = [obsolescence_read(o) for o in app.obsolescences]
     data.dojos = list(app.dojos)
     data.vulnerabilites = [

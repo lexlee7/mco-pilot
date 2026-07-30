@@ -33,6 +33,12 @@ export interface Plage {
   validee_par_metier: boolean;
 }
 
+export interface RepartitionItem { cle: string; valeur: number; }
+
+export type TypeRecurrence =
+  | 'TEMPS_REEL' | 'HORAIRE' | 'QUOTIDIEN' | 'HEBDOMADAIRE'
+  | 'MENSUEL_DATE' | 'MENSUEL_JOUR' | 'ANNUEL' | 'A_LA_DEMANDE';
+
 export interface Flux {
   id: number;
   application_id: number;
@@ -46,6 +52,38 @@ export interface Flux {
   partenaire?: Partenaire | null;
   bloquant: boolean;
   description?: string | null;
+  recurrence: TypeRecurrence;
+  jours_semaine?: string | null;
+  jour_du_mois?: number | null;
+  occurrence_mois?: number | null;
+  jour_semaine_mois?: number | null;
+  mois_annee?: number | null;
+  duree_minutes?: number | null;
+  libelle_recurrence: string;
+  code_application?: string | null;
+  nom_application?: string | null;
+}
+
+export interface OccurrenceFlux {
+  flux_id: number;
+  nom: string;
+  application_id: number;
+  sens: string;
+  bloquant: boolean;
+  partenaire?: string | null;
+  date: string;
+  horodatage: string;
+  heure?: string | null;
+  note?: string | null;
+}
+
+export interface SyntheseFlux {
+  nb_flux: number;
+  nb_bloquants: number;
+  nb_applications_concernees: number;
+  nb_partenaires_concernes: number;
+  par_sens: RepartitionItem[];
+  par_recurrence: RepartitionItem[];
 }
 
 export interface DocumentApp {
@@ -184,6 +222,14 @@ export interface Application {
   editeur_id?: number | null;
   dora: boolean;
   expose_internet: boolean;
+  siis: boolean;
+  disponibilite?: number | null;
+  integrite?: number | null;
+  confidentialite?: number | null;
+  preuve?: number | null;
+  dima?: number | null;
+  pdma?: number | null;
+  technologies?: string | null;
   editeur?: Partenaire | null;
   plages: Plage[];
   nb_vulnerabilites_ouvertes: number;
@@ -305,9 +351,13 @@ export interface HistoriqueComm {
   envoye_le: string;
   statut_envoi: string;
   application_id?: number | null;
+  applications_codes?: string | null;
 }
 
-export interface RepartitionItem { cle: string; valeur: number; }
+export interface CommunicationDetail extends HistoriqueComm {
+  corps_html: string;
+  detail_envoi?: string | null;
+}
 
 export interface DashboardStats {
   nb_applications: number;
@@ -325,6 +375,8 @@ export interface DashboardStats {
   repartition_statuts: RepartitionItem[];
   repartition_criticites: RepartitionItem[];
   repartition_gravites: RepartitionItem[];
+  repartition_dora: RepartitionItem[];
+  repartition_exposition: RepartitionItem[];
   couverture_plages: RepartitionItem[];
   applications_a_risque: { id: number; code: string; nom: string }[];
 }
@@ -344,6 +396,8 @@ export interface Referentiels {
   categories_template: string[];
   statuts_obsolescence: string[];
   types_dojo: string[];
+  types_recurrence: string[];
+  niveaux_dicp: number[];
 }
 
 export const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];

@@ -91,6 +91,10 @@ def statistiques(db: Session = Depends(get_db)):
         ),
     )[:5]
 
+    dora = Counter("Périmètre DORA" if a.dora else "Hors DORA" for a in apps)
+    exposition = Counter(
+        "Exposée Internet" if a.expose_internet else "Interne" for a in apps
+    )
     statuts = Counter(a.statut.value for a in apps)
     criticites = Counter(a.criticite.value for a in apps)
     gravites = Counter(v.gravite.value for _, v in liens)
@@ -117,6 +121,10 @@ def statistiques(db: Session = Depends(get_db)):
         repartition_statuts=[RepartitionItem(cle=k, valeur=v) for k, v in statuts.items()],
         repartition_criticites=[RepartitionItem(cle=k, valeur=v) for k, v in criticites.items()],
         repartition_gravites=[RepartitionItem(cle=k, valeur=v) for k, v in gravites.items()],
+        repartition_dora=[RepartitionItem(cle=k, valeur=v) for k, v in dora.items()],
+        repartition_exposition=[
+            RepartitionItem(cle=k, valeur=v) for k, v in exposition.items()
+        ],
         couverture_plages=couverture,
         applications_a_risque=[ApplicationMini.model_validate(a) for a in a_risque],
     )

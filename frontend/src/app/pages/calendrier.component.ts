@@ -200,14 +200,21 @@ interface Jour {
       .bascule { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
       .bascule input { accent-color: var(--signal); }
 
-      .grille-jours { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+      /* minmax(0, 1fr) et non 1fr : sans cela une colonne refuse de descendre
+         sous la largeur de son contenu. Un titre d'événement long en « nowrap »
+         élargit alors sa colonne, écrase les autres et désaligne les en-têtes. */
+      .grille-jours {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 6px;
+      }
       .entetes { margin-bottom: 8px; }
       .entete {
         font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
         color: var(--texte-doux); text-align: center; padding-bottom: 4px;
       }
       .case {
-        min-height: 104px; padding: 8px;
+        min-height: 104px; padding: 8px; min-width: 0;
         border: 1px solid var(--bordure); border-radius: 10px;
         background: var(--surface);
         display: flex; flex-direction: column; gap: 4px;
@@ -221,6 +228,7 @@ interface Jour {
       .jeton {
         font-size: 10.5px; padding: 3px 6px; border-radius: 5px;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        min-width: 0; max-width: 100%;
       }
       .jeton--evenement { background: rgba(155, 123, 255, 0.18); border-left: 2px solid var(--violet); }
       .jeton--plage { background: var(--signal-sourd); border-left: 2px solid var(--signal); }

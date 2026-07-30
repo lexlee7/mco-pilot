@@ -166,9 +166,10 @@ export class AppComponent {
     { chemin: '/plages', libelle: 'Créneaux de maintenance', icone: 'horloge', indice: '03' },
     { chemin: '/vulnerabilites', libelle: 'Vulnérabilités', icone: 'bouclier', indice: '04' },
     { chemin: '/obsolescences', libelle: 'Obsolescences', icone: 'sablier', indice: '05' },
-    { chemin: '/calendrier', libelle: 'Calendrier MCO', icone: 'calendrier', indice: '06' },
-    { chemin: '/partenaires', libelle: 'Éditeurs & partenaires', icone: 'contacts', indice: '07' },
-    { chemin: '/communication', libelle: 'Communication de crise', icone: 'megaphone', indice: '08' },
+    { chemin: '/flux', libelle: 'Gestion des flux', icone: 'flux', indice: '06' },
+    { chemin: '/calendrier', libelle: 'Calendrier MCO', icone: 'calendrier', indice: '07' },
+    { chemin: '/partenaires', libelle: 'Éditeurs & partenaires', icone: 'contacts', indice: '08' },
+    { chemin: '/communication', libelle: 'Communication de crise', icone: 'megaphone', indice: '09' },
   ];
 
   @HostListener('window:keydown.escape')

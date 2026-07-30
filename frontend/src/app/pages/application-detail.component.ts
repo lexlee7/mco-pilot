@@ -53,6 +53,7 @@ interface NoeudPlace {
             @if (a.equipe) { <span class="pastille p-neutre">{{ a.equipe }}</span> }
             @if (a.dora) { <span class="pastille p-info">Périmètre DORA</span> }
             @if (a.expose_internet) { <span class="pastille p-alerte">Exposée Internet</span> }
+            @if (a.siis) { <span class="pastille p-info">SIIS</span> }
             @if (a.nb_vulnerabilites_ouvertes) {
               <span class="pastille p-critique">
                 {{ a.nb_vulnerabilites_ouvertes }} faille(s) active(s)
@@ -124,6 +125,12 @@ interface NoeudPlace {
                   {{ a.dora ? 'Oui' : 'Non' }}
                 </span>
               </dd>
+              <dt>Système d'importance stratégique (SIIS)</dt>
+              <dd>
+                <span [class]="a.siis ? 'pastille p-info' : 'pastille p-neutre'">
+                  {{ a.siis ? 'Oui' : 'Non' }}
+                </span>
+              </dd>
               <dt>Exposition Internet</dt>
               <dd>
                 <span [class]="a.expose_internet ? 'pastille p-alerte' : 'pastille p-neutre'">
@@ -136,6 +143,30 @@ interface NoeudPlace {
           </div>
 
           <div class="pile">
+            <div class="carte">
+              <div class="eyebrow">Classification</div>
+              <h2 class="titre-bloc">DICP et exigences de reprise</h2>
+              <div class="grille-dicp">
+                @for (c of criteres; track c.cle) {
+                  <div class="dicp">
+                    <div class="dicp__lettre">{{ c.lettre }}</div>
+                    <div class="dicp__libelle">{{ c.libelle }}</div>
+                    <div class="dicp__jauge">
+                      @for (n of [1, 2, 3, 4]; track n) {
+                        <span class="dicp__cran" [class.dicp__cran--plein]="niveau(a, c.cle) >= n"></span>
+                      }
+                    </div>
+                    <div class="dicp__valeur mono">{{ niveau(a, c.cle) || '—' }}</div>
+                  </div>
+                }
+              </div>
+              @if (a.technologies) {
+                <div style="margin-top: 18px">
+                  <div class="eyebrow">Technologies utilisées</div>
+                  <p class="texte-long">{{ a.technologies }}</p>
+                </div>
+              }
+            </div>
             <div class="carte">
               <div class="eyebrow">Accès production</div>
               <h2 class="titre-bloc">Habilitations et droits requis</h2>
@@ -345,7 +376,7 @@ interface NoeudPlace {
                   <tr>
                     <td>{{ f.nom }}</td>
                     <td><span class="pastille p-info">{{ format(f.sens) }}</span></td>
-                    <td class="doux">{{ format(f.frequence) }}</td>
+                    <td class="doux">{{ f.libelle_recurrence || format(f.frequence) }}</td>
                     <td class="mono">{{ f.heure || '—' }}</td>
                     <td class="doux">{{ f.jour || '—' }}</td>
                     <td class="mono doux">{{ f.protocole || '—' }}</td>
@@ -782,6 +813,23 @@ interface NoeudPlace {
       .noeud__code { fill: var(--texte); font-size: 15px; font-weight: 600; font-family: var(--display); }
       .noeud__detail { fill: var(--texte-doux); font-size: 10.5px; font-family: var(--corps); }
 
+      .grille-dicp { display: grid; gap: 12px; margin-top: 16px; }
+      .dicp {
+        display: grid; grid-template-columns: 46px minmax(0, 1fr) 84px 24px;
+        align-items: center; gap: 10px;
+      }
+      .dicp__lettre {
+        font-family: var(--display); font-weight: 600; font-size: 14px; color: var(--signal);
+      }
+      .dicp__libelle { font-size: 12.5px; color: var(--texte-doux); }
+      .dicp__jauge { display: flex; gap: 3px; }
+      .dicp__cran {
+        width: 17px; height: 7px; border-radius: 3px; background: var(--surface-forte);
+        border: 1px solid var(--bordure);
+      }
+      .dicp__cran--plein { background: var(--signal); border-color: var(--signal); }
+      .dicp__valeur { font-size: 12px; color: var(--texte-doux); text-align: right; }
+
       .lien-doc {
         display: inline-flex; align-items: center; gap: 6px;
         margin-top: 10px; font-size: 12px; color: var(--signal);
@@ -875,6 +923,19 @@ export class ApplicationDetailComponent {
   charger(): void {
     this.api.application(this.appId).subscribe((a) => this.app.set(a));
     this.api.cartographie(this.appId).subscribe((c) => this.cartographie.set(c));
+  }
+
+  readonly criteres = [
+    { cle: 'disponibilite', lettre: 'D', libelle: 'Disponibilité' },
+    { cle: 'integrite', lettre: 'I', libelle: 'Intégrité' },
+    { cle: 'confidentialite', lettre: 'C', libelle: 'Confidentialité' },
+    { cle: 'preuve', lettre: 'P', libelle: 'Preuve' },
+    { cle: 'dima', lettre: 'DIMA', libelle: 'Durée max. d’interruption admissible' },
+    { cle: 'pdma', lettre: 'PDMA', libelle: 'Perte de données max. admissible' },
+  ] as const;
+
+  niveau(a: ApplicationDetail, cle: string): number {
+    return ((a as unknown as Record<string, number | null>)[cle] ?? 0) as number;
   }
 
   nbObsoEnRetard(a: ApplicationDetail): number {

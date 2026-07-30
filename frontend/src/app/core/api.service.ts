@@ -6,6 +6,7 @@ import {
   Application,
   ApplicationDetail,
   Cartographie,
+  CommunicationDetail,
   Dojo,
   DashboardStats,
   Dispositif,
@@ -16,9 +17,11 @@ import {
   ListeDiffusion,
   OccurrencePlage,
   Obsolescence,
+  OccurrenceFlux,
   Partenaire,
   Plage,
   PlanningObsolescences,
+  SyntheseFlux,
   Referentiels,
   ReponseCreneaux,
   TemplateComm,
@@ -119,6 +122,34 @@ export class ApiService {
 
   cartographie(appId: number): Observable<Cartographie> {
     return this.http.get<Cartographie>(`${this.base}/api/applications/${appId}/cartographie`);
+  }
+
+  // ------------------------------------------------------------ Gestion des flux
+  listerFlux(filtres: Record<string, string | undefined> = {}): Observable<Flux[]> {
+    let params = new HttpParams();
+    Object.entries(filtres).forEach(([cle, valeur]) => {
+      if (valeur) params = params.set(cle, valeur);
+    });
+    return this.http.get<Flux[]>(`${this.base}/api/flux`, { params });
+  }
+  syntheseFlux(): Observable<SyntheseFlux> {
+    return this.http.get<SyntheseFlux>(`${this.base}/api/flux/synthese`);
+  }
+  occurrencesFlux(filtres: Record<string, string | undefined> = {}): Observable<OccurrenceFlux[]> {
+    let params = new HttpParams();
+    Object.entries(filtres).forEach(([cle, valeur]) => {
+      if (valeur) params = params.set(cle, valeur);
+    });
+    return this.http.get<OccurrenceFlux[]>(`${this.base}/api/flux/occurrences`, { params });
+  }
+  creerFluxGlobal(corps: Partial<Flux>): Observable<Flux> {
+    return this.http.post<Flux>(`${this.base}/api/flux`, corps);
+  }
+  modifierFluxGlobal(id: number, corps: Partial<Flux>): Observable<Flux> {
+    return this.http.put<Flux>(`${this.base}/api/flux/${id}`, corps);
+  }
+  supprimerFluxGlobal(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/flux/${id}`);
   }
 
   // ------------------------------------------------------------ Obsolescences
@@ -259,5 +290,9 @@ export class ApiService {
   }
   historiqueCommunications(): Observable<HistoriqueComm[]> {
     return this.http.get<HistoriqueComm[]>(`${this.base}/api/communication/historique`);
+  }
+  consulterCommunication(id: number): Observable<CommunicationDetail> {
+    return this.http.get<CommunicationDetail>(
+      `${this.base}/api/communication/historique/${id}`);
   }
 }

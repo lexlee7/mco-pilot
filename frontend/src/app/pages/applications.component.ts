@@ -96,6 +96,12 @@ import { ModaleComponent } from '../shared/modale.component';
                     @if (app.expose_internet) {
                       <span class="marqueur marqueur--web">Internet</span>
                     }
+                    @if (app.siis) { <span class="marqueur marqueur--siis">SIIS</span> }
+                    @if (app.disponibilite || app.integrite || app.confidentialite || app.preuve) {
+                      <span class="marqueur marqueur--dicp mono" title="Disponibilité, Intégrité, Confidentialité, Preuve">
+                        DICP {{ app.disponibilite || '·' }}{{ app.integrite || '·' }}{{ app.confidentialite || '·' }}{{ app.preuve || '·' }}
+                      </span>
+                    }
                   </div>
                 </td>
                 <td><span [class]="classe(app.criticite)">{{ format(app.criticite) }}</span></td>
@@ -244,6 +250,54 @@ import { ModaleComponent } from '../shared/modale.component';
               <span class="doux">Accessible depuis l'extérieur du réseau interne</span>
             </span>
           </label>
+          <label class="interrupteur">
+            <input type="checkbox" [(ngModel)]="brouillon.siis" />
+            <span>
+              <strong>SIIS</strong>
+              <span class="doux">Système d'information d'importance stratégique</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="bloc-dicp">
+          <div class="eyebrow">Classification</div>
+          <h3 class="titre-dicp">DICP et exigences de reprise</h3>
+          <p class="doux" style="font-size: 12px; margin: 4px 0 14px">
+            Notation de 1 (exigence faible) à 4 (exigence forte).
+          </p>
+          <div class="grille-notes">
+            @for (critere of criteres; track critere.cle) {
+              <div class="note">
+                <div class="note__tete">
+                  <strong>{{ critere.lettre }}</strong>
+                  <span>{{ critere.libelle }}</span>
+                </div>
+                <div class="note__boutons">
+                  @for (n of [1, 2, 3, 4]; track n) {
+                    <button
+                      type="button"
+                      class="cran"
+                      [class.cran--actif]="valeurCritere(critere.cle) === n"
+                      [attr.aria-label]="critere.libelle + ' niveau ' + n"
+                      (click)="definirCritere(critere.cle, n)"
+                    >
+                      {{ n }}
+                    </button>
+                  }
+                  @if (valeurCritere(critere.cle)) {
+                    <button class="btn btn--fantome btn--petit" type="button"
+                            (click)="definirCritere(critere.cle, null)">effacer</button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="champ" style="margin-top: 16px">
+          <label for="techno">Technologies utilisées</label>
+          <textarea id="techno" class="saisie" [(ngModel)]="brouillon.technologies"
+                    placeholder="Java 17, Spring Boot, PostgreSQL 16, Angular, Kubernetes…"></textarea>
         </div>
 
         <div class="grille-form" style="margin-top: 16px">
@@ -297,6 +351,33 @@ import { ModaleComponent } from '../shared/modale.component';
       }
       .marqueur--dora { color: var(--signal); background: var(--signal-sourd); }
       .marqueur--web { color: var(--ambre); background: rgba(242, 163, 60, 0.13); }
+      .marqueur--siis { color: var(--violet); background: rgba(155, 123, 255, 0.14); }
+      .marqueur--dicp { color: var(--texte-doux); background: var(--surface-forte); }
+
+      .bloc-dicp {
+        margin-top: 18px; padding: 16px;
+        border: 1px dashed var(--bordure-forte); border-radius: var(--r-m);
+      }
+      .titre-dicp { font-size: 15px; margin-top: 6px; }
+      .grille-notes {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px;
+      }
+      .note__tete { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+      .note__tete strong {
+        font-family: var(--display); font-size: 17px; color: var(--signal); width: 18px;
+      }
+      .note__tete span { font-size: 12.5px; color: var(--texte-doux); }
+      .note__boutons { display: flex; gap: 4px; align-items: center; }
+      .cran {
+        width: 32px; height: 30px; border-radius: 7px; cursor: pointer;
+        border: 1px solid var(--bordure-forte); background: transparent;
+        color: var(--texte-doux); font-family: var(--mono); font-size: 13px;
+        transition: all var(--transition);
+      }
+      .cran:hover { border-color: var(--signal); }
+      .cran--actif {
+        background: var(--signal-sourd); border-color: var(--signal); color: var(--texte);
+      }
       .interrupteur { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
       .interrupteur input { accent-color: var(--signal); width: 16px; height: 16px; margin-top: 2px; }
       .interrupteur strong { display: block; font-size: 13.5px; font-weight: 500; }
@@ -419,7 +500,25 @@ export class ApplicationsComponent {
       editeur_id: null,
       dora: false,
       expose_internet: false,
+      siis: false,
     };
+  }
+
+  readonly criteres = [
+    { cle: 'disponibilite', lettre: 'D', libelle: 'Disponibilité' },
+    { cle: 'integrite', lettre: 'I', libelle: 'Intégrité' },
+    { cle: 'confidentialite', lettre: 'C', libelle: 'Confidentialité' },
+    { cle: 'preuve', lettre: 'P', libelle: 'Preuve' },
+    { cle: 'dima', lettre: 'DIMA', libelle: 'Interruption max. admissible' },
+    { cle: 'pdma', lettre: 'PDMA', libelle: 'Perte de données max. admissible' },
+  ] as const;
+
+  valeurCritere(cle: string): number | null {
+    return (this.brouillon as Record<string, unknown>)[cle] as number | null;
+  }
+
+  definirCritere(cle: string, valeur: number | null): void {
+    (this.brouillon as Record<string, unknown>)[cle] = valeur;
   }
 
   classe = classePastille;

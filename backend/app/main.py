@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from . import models  # noqa: F401 (import nécessaire pour créer les tables)
 from .database import Base, SessionLocal, engine
 from .schema_sync import synchroniser_schema
-from .routers import applications, communication, dashboard, evenements, maintenance
+from .routers import applications, communication, dashboard, evenements, flux, maintenance
 from .routers import obsolescences, partenaires, vulnerabilites
 from .services.scheduler import arreter_scheduler, demarrer_scheduler
 
@@ -65,6 +65,7 @@ app.include_router(applications.router)
 app.include_router(partenaires.router)
 app.include_router(vulnerabilites.router)
 app.include_router(obsolescences.router)
+app.include_router(flux.router)
 app.include_router(maintenance.router)
 app.include_router(evenements.router)
 app.include_router(communication.router)
@@ -125,6 +126,8 @@ def referentiels():
         "types_evenement": [e.value for e in models.TypeEvenement],
         "statuts_obsolescence": [e.value for e in models.StatutObsolescence],
         "types_dojo": [e.value for e in models.TypeDojo],
+        "types_recurrence": [e.value for e in models.TypeRecurrence],
+        "niveaux_dicp": [1, 2, 3, 4],
         "categories_template": [e.value for e in models.CategorieTemplate],
     }
 

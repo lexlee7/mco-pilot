@@ -72,6 +72,19 @@ class FrequenceFlux(str, enum.Enum):
     A_LA_DEMANDE = "A_LA_DEMANDE"
 
 
+class TypeRecurrence(str, enum.Enum):
+    """Rythme d'un flux, sur le modèle des réunions périodiques."""
+
+    TEMPS_REEL = "TEMPS_REEL"
+    HORAIRE = "HORAIRE"
+    QUOTIDIEN = "QUOTIDIEN"
+    HEBDOMADAIRE = "HEBDOMADAIRE"  # tous les lundis et jeudis…
+    MENSUEL_DATE = "MENSUEL_DATE"  # tous les 14 du mois
+    MENSUEL_JOUR = "MENSUEL_JOUR"  # le 1er mardi du mois
+    ANNUEL = "ANNUEL"
+    A_LA_DEMANDE = "A_LA_DEMANDE"
+
+
 class TypeDocument(str, enum.Enum):
     DAT = "DAT"
     DEX = "DEX"
@@ -233,6 +246,17 @@ class Application(Base):
     # les exigences de résilience et les délais de correction des failles.
     dora: Mapped[bool] = mapped_column(Boolean, default=False)
     expose_internet: Mapped[bool] = mapped_column(Boolean, default=False)
+    siis: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Classification DICP et exigences de reprise, notées de 1 (faible) à 4 (fort).
+    disponibilite: Mapped[int | None] = mapped_column(Integer)
+    integrite: Mapped[int | None] = mapped_column(Integer)
+    confidentialite: Mapped[int | None] = mapped_column(Integer)
+    preuve: Mapped[int | None] = mapped_column(Integer)
+    dima: Mapped[int | None] = mapped_column(Integer)  # durée max d'interruption admissible
+    pdma: Mapped[int | None] = mapped_column(Integer)  # perte de données max admissible
+
+    technologies: Mapped[str | None] = mapped_column(Text)
 
     cree_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     maj_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
@@ -291,6 +315,17 @@ class Flux(Base):
     heure: Mapped[str | None] = mapped_column(String(5))
     jour: Mapped[str | None] = mapped_column(String(40))
     protocole: Mapped[str | None] = mapped_column(String(40))
+
+    # Périodicité détaillée, sur le principe d'une réunion récurrente.
+    recurrence: Mapped[TypeRecurrence] = mapped_column(
+        Enum(TypeRecurrence), default=TypeRecurrence.QUOTIDIEN
+    )
+    jours_semaine: Mapped[str | None] = mapped_column(String(20))  # "0;3" = lundi et jeudi
+    jour_du_mois: Mapped[int | None] = mapped_column(Integer)  # 14 = tous les 14
+    occurrence_mois: Mapped[int | None] = mapped_column(Integer)  # 1..4, 5 = dernier
+    jour_semaine_mois: Mapped[int | None] = mapped_column(Integer)  # 0 = lundi
+    mois_annee: Mapped[int | None] = mapped_column(Integer)  # 1..12 pour l'annuel
+    duree_minutes: Mapped[int | None] = mapped_column(Integer)
     partenaire_id: Mapped[int | None] = mapped_column(
         ForeignKey("partenaires.id", ondelete="SET NULL")
     )
@@ -477,6 +512,7 @@ class Communication(Base):
     application_id: Mapped[int | None] = mapped_column(
         ForeignKey("applications.id", ondelete="SET NULL")
     )
+    applications_codes: Mapped[str | None] = mapped_column(String(255))
     envoye_le: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     statut_envoi: Mapped[str] = mapped_column(String(40), default="ENVOYE")
     detail_envoi: Mapped[str | None] = mapped_column(Text)
